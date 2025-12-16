@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+
 import { Geist, Geist_Mono, Geist as V0_Font_Geist, Geist_Mono as V0_Font_Geist_Mono, Source_Serif_4 as V0_Font_Source_Serif_4 } from 'next/font/google'
 
 // Initialize fonts
@@ -57,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html className="" lang="en">
       <body className={`font-sans antialiased`}>
         <a
           href="#main-content"

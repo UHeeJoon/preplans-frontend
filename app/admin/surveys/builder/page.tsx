@@ -1,135 +1,62 @@
 "use client"
 
 import type React from "react"
-import { useCallback, useState } from "react"
+
+import { useCallback, useState, useEffect, useMemo } from "react"
 import ReactFlow, {
-  addEdge,
-  Background,
   type Connection,
   Controls,
   type Edge,
   type Node,
-  Panel,
-  ReactFlowProvider,
   useEdgesState,
   useNodesState,
   MarkerType,
-  Handle,
-  Position,
+  MiniMap,
+  type OnNodesChange,
+  applyNodeChanges,
+  ReactFlowProvider,
+  Background,
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Card } from "@/components/ui/card"
 import {
-  Plus,
-  FileText,
-  ListChecks,
-  ToggleLeft,
-  ChevronDown,
-  Star,
   Save,
   Play,
-  Share2,
   Settings,
+  Menu,
   X,
+  ChevronLeft,
+  ChevronRight,
   ArrowLeft,
-  Download,
-  Upload,
+  ArrowRight,
+  Check,
+  Star,
   Trash2,
-  Copy,
+  Plus,
+  AlertCircle,
 } from "lucide-react"
 import Link from "next/link"
-
-type QuestionType = "text" | "multiple-choice" | "scale" | "checkbox" | "dropdown" | "start" | "end"
-
-interface QuestionNodeData {
-  label: string
-  type: QuestionType
-  required?: boolean
-  options?: string[]
-  description?: string
-}
-
-function QuestionNode({ data, selected }: { data: QuestionNodeData; selected: boolean }) {
-  const getIcon = () => {
-    switch (data.type) {
-      case "start":
-        return <Play className="h-5 w-5" />
-      case "end":
-        return <Share2 className="h-5 w-5" />
-      case "text":
-        return <FileText className="h-5 w-5" />
-      case "multiple-choice":
-      case "dropdown":
-        return <ListChecks className="h-5 w-5" />
-      case "checkbox":
-        return <ToggleLeft className="h-5 w-5" />
-      case "scale":
-        return <Star className="h-5 w-5" />
-      default:
-        return <FileText className="h-5 w-5" />
-    }
-  }
-
-  const getColor = () => {
-    switch (data.type) {
-      case "start":
-        return "bg-green-500/10 border-green-500 text-green-700 dark:text-green-400"
-      case "end":
-        return "bg-red-500/10 border-red-500 text-red-700 dark:text-red-400"
-      default:
-        return "bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-400"
-    }
-  }
-
-  return (
-    <div
-      className={`min-w-[260px] rounded-xl border-2 bg-background p-4 shadow-xl transition-all ${
-        selected ? "ring-2 ring-primary ring-offset-2" : ""
-      } ${getColor()}`}
-    >
-      {data.type !== "start" && <Handle type="target" position={Position.Top} className="!bg-primary !h-3 !w-3" />}
-
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5">{getIcon()}</div>
-        <div className="flex-1 space-y-1.5">
-          <div className="text-base font-semibold">{data.label}</div>
-          {data.description && <div className="text-sm opacity-70">{data.description}</div>}
-          {data.required && (
-            <Badge variant="secondary" className="text-xs">
-              Required
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {data.options && data.options.length > 0 && (
-        <div className="mt-3 space-y-1 border-t pt-3">
-          {data.options.slice(0, 3).map((option, idx) => (
-            <div key={idx} className="text-sm opacity-60">
-              • {option}
-            </div>
-          ))}
-          {data.options.length > 3 && <div className="text-sm opacity-60">+{data.options.length - 3} more</div>}
-        </div>
-      )}
-
-      {data.type !== "end" && <Handle type="source" position={Position.Bottom} className="!bg-primary !h-3 !w-3" />}
-    </div>
-  )
-}
-
-const nodeTypes = {
-  question: QuestionNode,
-}
+import { QuestionNode, type QuestionNodeData, type QuestionType } from "@/components/survey-builder/question-node"
+import { CustomEdge } from "@/components/survey-builder/custom-edge"
+import { QUESTION_CATEGORIES } from "@/components/survey-builder/question-categories"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
+import { Progress } from "@/components/ui/progress"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 
 const initialNodes: Node<QuestionNodeData>[] = [
   {
@@ -138,52 +65,465 @@ const initialNodes: Node<QuestionNodeData>[] = [
     position: { x: 400, y: 100 },
     data: { label: "Start Survey", type: "start", description: "Survey entry point" },
   },
+  {
+    id: "end",
+    type: "question",
+    position: { x: 400, y: 500 },
+    data: { label: "End Survey", type: "end", description: "Thank you for completing the survey!" },
+  },
 ]
 
 const initialEdges: Edge[] = []
 
-function SurveyBuilderPage() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [selectedNode, setSelectedNode] = useState<Node<QuestionNodeData> | null>(null)
-  const [surveyTitle, setSurveyTitle] = useState("Untitled Survey")
+const nodeTypes = {
+  question: QuestionNode,
+}
 
+function SurveyBuilderPage() {
+  const [nodes, setNodes, _onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [surveyTitle, setSurveyTitle] = useState("Untitled Survey")
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Placeholder for other states and handlers (e.g., selectedNode, addMenu related, settings, preview, etc.)
+  const [selectedNode, setSelectedNode] = useState<Node<QuestionNodeData> | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [connectionSource, setConnectionSource] = useState<{ nodeId: string; handleId: string } | null>(null)
+  const [showAddMenu, setShowAddMenu] = useState(false)
+  const [addMenuPosition, setAddMenuPosition] = useState({ x: 0, y: 0 })
+  const [addMenuContext, setAddMenuContext] = useState<{
+    type: "new" | "insert" | "direction" | null
+    data?: any
+  } | null>({ type: null })
+  const [addMenuNodeId, setAddMenuNodeId] = useState<string | null>(null)
+  const [addMenuDirection, setAddMenuDirection] = useState<string | null>(null)
   const [editingLabel, setEditingLabel] = useState("")
   const [editingType, setEditingType] = useState<QuestionType>("text")
   const [editingRequired, setEditingRequired] = useState(false)
   const [editingDescription, setEditingDescription] = useState("")
   const [editingOptions, setEditingOptions] = useState<string[]>([])
+  const [showSettings, setShowSettings] = useState(false)
+  const [surveySettings, setSurveySettings] = useState({
+    description: "",
+    welcomeMessage: "Welcome to our survey! Your feedback is valuable.",
+    thankYouMessage: "Thank you for completing the survey!",
+    allowAnonymous: true,
+    showProgressBar: true,
+    randomizeQuestions: false,
+    allowMultipleSubmissions: false,
+  })
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewCurrentNodeId, setPreviewCurrentNodeId] = useState<string | null>(null)
+  const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({})
+  const [previewVisitedNodes, setPreviewVisitedNodes] = useState<string[]>([])
+  const [showPreviewSidebar, setShowPreviewSidebar] = useState(true)
 
-  const onConnect = useCallback(
-    (params: Connection) => {
-      const edge = {
-        ...params,
-        type: "smoothstep",
-        animated: true,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-        },
+  const handleInsertNodeOnEdge = useCallback(
+    (edgeId: string, labelX: number, labelY: number) => {
+      console.log("[v0] handleInsertNodeOnEdge called", { edgeId })
+      const edge = edges.find((e) => e.id === edgeId)
+      if (!edge) {
+        console.log("[v0] Edge not found", edgeId)
+        return
       }
-      setEdges((eds) => addEdge(edge, eds))
+
+      const sourceNode = nodes.find((n) => n.id === edge.source)
+      const targetNode = nodes.find((n) => n.id === edge.target)
+
+      if (!sourceNode || !targetNode) {
+        console.log("[v0] Source or target node not found")
+        return
+      }
+
+      const midX = (sourceNode.position.x + targetNode.position.x) / 2
+      const midY = (sourceNode.position.y + targetNode.position.y) / 2
+
+      setAddMenuPosition({ x: midX, y: midY })
+      setAddMenuContext({
+        type: "insert",
+        data: {
+          edgeId,
+          sourceNode,
+          targetNode,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        },
+      })
+      setShowAddMenu(true)
     },
-    [setEdges],
+    [edges, nodes, setAddMenuPosition, setAddMenuContext, setShowAddMenu],
   )
 
-  const addNode = (type: QuestionType) => {
+  const edgeTypes = useMemo(
+    () => ({
+      custom: (props: any) => <CustomEdge {...props} data={{ ...props.data, onInsertNode: handleInsertNodeOnEdge }} />,
+    }),
+    [handleInsertNodeOnEdge],
+  )
+
+  useEffect(() => {
+    const errorHandler = (e: ErrorEvent) => {
+      if (e.message === "ResizeObserver loop completed with undelivered notifications.") {
+        e.stopImmediatePropagation()
+        return
+      }
+      if (e.message.includes("ResizeObserver loop limit exceeded")) {
+        e.stopImmediatePropagation()
+        return
+      }
+    }
+    window.addEventListener("error", errorHandler)
+    return () => window.removeEventListener("error", errorHandler)
+  }, [])
+
+  const onNodesChange: OnNodesChange = useCallback(
+    (changes) => {
+      const filteredChanges = changes.filter((change) => {
+        if (change.type === "remove") {
+          const node = nodes.find((n) => n.id === change.id)
+          if (node && node.data.type === "start") {
+            return false
+          }
+        }
+        return true
+      })
+      setNodes((nds) => applyNodeChanges(filteredChanges, nds))
+    },
+    [nodes, setNodes],
+  )
+
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      console.log("[v0] onConnect called", connection)
+
+      const sourceNode = nodes.find((n) => n.id === connection.source)
+      const targetNode = nodes.find((n) => n.id === connection.target)
+
+      // Prevent self-connections
+      if (connection.source === connection.target) {
+        console.log("[v0] Prevented self-connection")
+        return
+      }
+
+      if (sourceNode?.data.type === "start") {
+        // Start node: only 1 outgoing connection
+        console.log("[v0] Start node: removing existing connections")
+        setEdges((eds) => {
+          const filtered = eds.filter((e) => e.source !== "start")
+          return [
+            ...filtered,
+            {
+              ...connection,
+              id: `e${connection.source}-${connection.target}`,
+              type: "custom",
+              animated: true,
+              markerEnd: { type: MarkerType.ArrowClosed },
+              data: {},
+            } as Edge,
+          ]
+        })
+      } else if (sourceNode?.data.type === "radio" && connection.sourceHandle?.includes("option")) {
+        // Radio option: only 1 connection per option
+        console.log("[v0] Radio option: removing existing connection for", connection.sourceHandle)
+        setEdges((eds) => {
+          const filtered = eds.filter(
+            (e) => !(e.source === connection.source && e.sourceHandle === connection.sourceHandle),
+          )
+          return [
+            ...filtered,
+            {
+              ...connection,
+              id: `e${connection.source}-${connection.target}`,
+              type: "custom",
+              animated: true,
+              markerEnd: { type: MarkerType.ArrowClosed },
+              data: {},
+            } as Edge,
+          ]
+        })
+      } else {
+        // Regular node: only 1 outgoing connection
+        console.log("[v0] Regular node: removing existing outgoing connections from", connection.source)
+        setEdges((eds) => {
+          const filtered = eds.filter((e) => e.source !== connection.source)
+          return [
+            ...filtered,
+            {
+              ...connection,
+              id: `e${connection.source}-${connection.target}`,
+              type: "custom",
+              animated: true,
+              markerEnd: { type: MarkerType.ArrowClosed },
+              data: {},
+            } as Edge,
+          ]
+        })
+      }
+    },
+    [nodes, setEdges],
+  )
+
+  const onConnectStart = useCallback((_: any, params: { nodeId: string | null; handleId: string | null }) => {
+    if (params.nodeId && params.handleId) {
+      setIsConnecting(true)
+      setConnectionSource({ nodeId: params.nodeId, handleId: params.handleId })
+    }
+  }, [])
+
+  const onConnectEnd = useCallback(() => {
+    setIsConnecting(false)
+    setConnectionSource(null)
+  }, [])
+
+  const addNode = (type: QuestionType, position?: { x: number; y: number }) => {
+    if (type === "start") {
+      alert("Start node already exists")
+      return null
+    }
+
+    let defaultOptions: string[] | undefined = undefined
+    if (type === "radio") {
+      defaultOptions = ["Option 1"] // Minimum 1 for radio
+    } else if (type === "checkbox") {
+      defaultOptions = ["Option 1", "Option 2"] // Minimum 2 for checkbox
+    }
+
     const newNode: Node<QuestionNodeData> = {
-      id: `node-${Date.now()}`,
+      id: type === "end" ? `end-${Date.now()}` : `node-${Date.now()}`,
       type: "question",
-      position: { x: Math.random() * 400 + 200, y: Math.random() * 400 + 300 },
+      position: position || { x: Math.random() * 400 + 200, y: Math.random() * 400 + 300 },
       data: {
         label: type === "end" ? "End Survey" : "New Question",
         type,
         required: false,
-        description: "",
-        options: type !== "text" && type !== "scale" && type !== "end" ? ["Option 1", "Option 2"] : undefined,
+        description: type === "end" ? "Thank you for completing the survey!" : "",
+        options: defaultOptions,
+        conditionalTargets: {},
       },
     }
     setNodes((nds) => [...nds, newNode])
+    return newNode
   }
+
+  useEffect(() => {
+    ;(window as any).__triggerAddNode = ({ nodeId, direction }: { nodeId: string; direction: string }) => {
+      console.log("[v0] __triggerAddNode called", { nodeId, direction })
+
+      setAddMenuContext({
+        type: "direction",
+        data: { nodeId, direction },
+      })
+
+      const sourceNode = nodes.find((n) => n.id === nodeId)
+      if (sourceNode) {
+        const viewport = document.querySelector(".react-flow__viewport")
+        if (viewport) {
+          const rect = viewport.getBoundingClientRect()
+          setAddMenuPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          })
+        }
+      }
+
+      setShowAddMenu(true)
+    }
+
+    return () => {
+      delete (window as any).__triggerAddNode
+    }
+  }, [nodes])
+
+  const handleAddNode = useCallback(
+    (type: QuestionType) => {
+      console.log("[v0] handleAddNode called", { type, context: addMenuContext })
+
+      const newId = `node-${Date.now()}`
+      let position = { x: 0, y: 0 }
+      const questionType = type
+
+      const nodeData: QuestionNodeData = {
+        label: type === "start" ? "Start Survey" : type === "end" ? "End Survey" : "New Question",
+        type,
+        required: type !== "start" && type !== "end",
+        question: "",
+      }
+
+      if (type === "radio") {
+        nodeData.options = ["Option 1"]
+        nodeData.conditionalTargets = {}
+      } else if (type === "checkbox") {
+        nodeData.options = ["Option 1", "Option 2"]
+      }
+
+      // </CHANGE> Handle insert context - create node between source and target
+      if (addMenuContext?.type === "insert" && addMenuContext.data) {
+        const { edgeId, sourceNode, targetNode, sourceHandle, targetHandle } = addMenuContext.data
+        console.log("[v0] Insert context - creating node between", {
+          sourceNode: sourceNode.id,
+          targetNode: targetNode.id,
+          sourceHandle,
+          targetHandle,
+        })
+
+        const midX = (sourceNode.position.x + targetNode.position.x) / 2
+        const midY = (sourceNode.position.y + targetNode.position.y) / 2
+
+        const newNode: Node<QuestionNodeData> = {
+          id: newId,
+          type: "question",
+          position: { x: midX - 140, y: midY - 80 },
+          data: {
+            label: "New Question",
+            type: questionType,
+            required: true,
+            question: "",
+            options:
+              questionType === "radio"
+                ? ["Option 1"]
+                : questionType === "checkbox"
+                  ? ["Option 1", "Option 2"]
+                  : undefined,
+            conditionalTargets: {},
+            description: "",
+          },
+        }
+
+        setNodes((nds) => [...nds, newNode])
+
+        const closestSourceHandle = sourceHandle || `${sourceNode.id}-source-right`
+        const closestTargetHandle = targetHandle || `${targetNode.id}-target-left`
+
+        const edge1: Edge = {
+          id: `edge-${newId}`,
+          source: sourceNode.id,
+          target: newId,
+          sourceHandle: closestSourceHandle,
+          targetHandle: `${newId}-target-left`,
+          type: "custom",
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed },
+          data: {},
+        }
+
+        const edge2: Edge = {
+          id: `edge-${newId + 1}`,
+          source: newId,
+          target: targetNode.id,
+          sourceHandle: `${newId}-source-right`,
+          targetHandle: closestTargetHandle,
+          type: "custom",
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed },
+          data: {},
+        }
+
+        console.log("[v0] Creating A->C->B edges", { edge1, edge2 })
+
+        setEdges((eds) => {
+          const filtered = eds.filter((e) => e.id !== edgeId)
+          console.log("[v0] Removed edge", edgeId, "remaining edges:", filtered.length)
+          return [...filtered, edge1, edge2]
+        })
+
+        setShowAddMenu(false)
+        setAddMenuContext(null)
+        return
+      } else if (addMenuContext?.type === "direction" && addMenuContext.data) {
+        const { nodeId, direction } = addMenuContext.data
+        const sourceNode = nodes.find((n) => n.id === nodeId)
+
+        console.log("[v0] Direction context", { nodeId, direction, sourceNode })
+
+        if (sourceNode) {
+          const offset = 250
+          switch (direction) {
+            case "top":
+              position = { x: sourceNode.position.x, y: sourceNode.position.y - offset }
+              break
+            case "right":
+              position = { x: sourceNode.position.x + offset, y: sourceNode.position.y }
+              break
+            case "bottom":
+              position = { x: sourceNode.position.x, y: sourceNode.position.y + offset }
+              break
+            case "left":
+              position = { x: sourceNode.position.x - offset, y: sourceNode.position.y }
+              break
+          }
+
+          const sourceHandle = `${nodeId}-source-${direction}`
+          const oppositeDirection =
+            direction === "top" ? "bottom" : direction === "bottom" ? "top" : direction === "left" ? "right" : "left"
+          const targetHandle = `${newId}-target-${oppositeDirection}`
+
+          console.log("[v0] Creating edge", { sourceHandle, targetHandle })
+
+          const newNode: Node<QuestionNodeData> = {
+            id: newId,
+            type: "question",
+            position,
+            data: nodeData,
+          }
+
+          const newEdge: Edge = {
+            id: `edge-${Date.now()}`,
+            source: nodeId,
+            target: newId,
+            sourceHandle: sourceHandle,
+            targetHandle: targetHandle,
+            type: "custom",
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+            data: { onInsertNode: handleInsertNodeOnEdge },
+          }
+
+          console.log("[v0] New edge created", newEdge)
+
+          setNodes((nds) => [...nds, newNode])
+
+          setEdges((eds) => {
+            let filteredEdges = eds
+
+            if (sourceNode.data.type === "start") {
+              console.log("[v0] Removing existing Start node edges")
+              filteredEdges = eds.filter((e) => e.source !== nodeId)
+            } else if (sourceNode.data.type === "radio") {
+              console.log("[v0] Removing existing radio option edge", sourceHandle)
+              filteredEdges = eds.filter((e) => !(e.source === nodeId && e.sourceHandle === sourceHandle))
+            } else {
+              console.log("[v0] Removing all existing edges from node")
+              filteredEdges = eds.filter((e) => e.source !== nodeId)
+            }
+
+            const result = [...filteredEdges, newEdge]
+            console.log("[v0] Updated edges", result)
+            return result
+          })
+
+          setShowAddMenu(false)
+          setAddMenuContext({ type: null, data: null })
+          return
+        }
+      } else {
+        position = addMenuPosition
+      }
+
+      const newNode: Node<QuestionNodeData> = {
+        id: newId,
+        type: "question",
+        position,
+        data: nodeData,
+      }
+
+      setNodes((nds) => [...nds, newNode])
+      setShowAddMenu(false)
+      setAddMenuContext({ type: null, data: null })
+    },
+    [nodes, edges, addMenuContext, addMenuPosition, setNodes, setEdges, handleInsertNodeOnEdge],
+  )
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node<QuestionNodeData>) => {
     setSelectedNode(node)
@@ -197,6 +537,26 @@ function SurveyBuilderPage() {
   const updateNodeData = () => {
     if (!selectedNode) return
 
+    const oldType = selectedNode.data.type
+    const newType = editingType
+
+    let finalOptions = editingOptions
+    if (newType === "radio" && finalOptions.length < 1) {
+      finalOptions = ["Option 1"]
+    } else if (newType === "checkbox" && finalOptions.length < 2) {
+      finalOptions = ["Option 1", "Option 2"]
+    }
+
+    if (oldType === "radio" && newType !== "radio") {
+      setEdges((eds) =>
+        eds.filter((edge) => edge.source !== selectedNode.id || !edge.sourceHandle?.startsWith("option")),
+      )
+    }
+
+    if (newType !== "radio" && newType !== "checkbox") {
+      finalOptions = []
+    }
+
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === selectedNode.id) {
@@ -208,33 +568,25 @@ function SurveyBuilderPage() {
               type: editingType,
               required: editingRequired,
               description: editingDescription,
-              options: editingOptions,
+              options: finalOptions,
             },
           }
         }
         return node
       }),
     )
+    setSelectedNode(null)
   }
 
   const deleteSelectedNode = () => {
     if (!selectedNode) return
+    if (selectedNode.data.type === "start" || selectedNode.data.type === "end") {
+      alert("Cannot delete Start or End nodes")
+      return
+    }
     setNodes((nds) => nds.filter((node) => node.id !== selectedNode.id))
     setEdges((eds) => eds.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id))
     setSelectedNode(null)
-  }
-
-  const duplicateSelectedNode = () => {
-    if (!selectedNode) return
-    const newNode: Node<QuestionNodeData> = {
-      ...selectedNode,
-      id: `node-${Date.now()}`,
-      position: {
-        x: selectedNode.position.x + 50,
-        y: selectedNode.position.y + 50,
-      },
-    }
-    setNodes((nds) => [...nds, newNode])
   }
 
   const addOption = () => {
@@ -248,357 +600,810 @@ function SurveyBuilderPage() {
   }
 
   const removeOption = (index: number) => {
+    if (editingType === "radio" && editingOptions.length <= 1) {
+      alert("Radio buttons must have at least 1 option")
+      return
+    }
+    if (editingType === "checkbox" && editingOptions.length <= 2) {
+      alert("Checkboxes must have at least 2 options")
+      return
+    }
     setEditingOptions(editingOptions.filter((_, idx) => idx !== index))
   }
 
-  return (
-    <div className="flex h-screen w-screen flex-col bg-background">
-      <div className="flex items-center justify-between border-b bg-background px-6 py-3 shadow-sm">
-        <div className="flex items-center gap-4">
-          <Link href="/admin">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Admin
-            </Button>
-          </Link>
-          <Separator orientation="vertical" className="h-6" />
-          <Input
-            value={surveyTitle}
-            onChange={(e) => setSurveyTitle(e.target.value)}
-            className="w-80 font-medium"
-            placeholder="Survey title..."
-          />
-          <Badge variant="outline">Draft</Badge>
+  const buildOrderedQuestionList = (): Node<QuestionNodeData>[] => {
+    const startNode = nodes.find((n) => n.data.type === "start")
+    if (!startNode) return []
+
+    const visited = new Set<string>()
+    const ordered: Node<QuestionNodeData>[] = []
+
+    const traverse = (nodeId: string) => {
+      if (visited.has(nodeId)) return
+      visited.add(nodeId)
+
+      const currentNode = nodes.find((n) => n.id === nodeId)
+      if (!currentNode) return
+
+      if (currentNode.data.type !== "start") {
+        ordered.push(currentNode)
+      }
+
+      if (currentNode.data.type === "end") return
+
+      const outgoingEdges = edges.filter((e) => e.source === nodeId)
+      for (const edge of outgoingEdges) {
+        traverse(edge.target)
+      }
+    }
+
+    traverse(startNode.id)
+    return ordered
+  }
+
+  const startPreview = () => {
+    const startNode = nodes.find((n) => n.data.type === "start")
+    if (!startNode) {
+      alert("No start node found")
+      return
+    }
+
+    const nextEdge = edges.find((e) => e.source === startNode.id)
+    if (!nextEdge) {
+      alert("Start node is not connected to any questions")
+      return
+    }
+
+    setPreviewCurrentNodeId(nextEdge.target)
+    setPreviewAnswers({})
+    setPreviewVisitedNodes([nextEdge.target])
+    setShowPreview(true)
+  }
+
+  const handlePreviewNext = () => {
+    if (!previewCurrentNodeId) return
+
+    const currentNode = nodes.find((n) => n.id === previewCurrentNodeId)
+    if (!currentNode) return
+
+    if (currentNode.data.required && !previewAnswers[previewCurrentNodeId]) {
+      alert("This question is required")
+      return
+    }
+
+    if (currentNode.data.type === "email" && previewAnswers[previewCurrentNodeId]) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(previewAnswers[previewCurrentNodeId])) {
+        alert("Please enter a valid email address")
+        return
+      }
+    }
+
+    if (currentNode.data.type === "number" && previewAnswers[previewCurrentNodeId]) {
+      if (isNaN(Number(previewAnswers[previewCurrentNodeId]))) {
+        alert("Please enter a valid number")
+        return
+      }
+    }
+
+    if (currentNode.data.type === "date" && previewAnswers[previewCurrentNodeId]) {
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (!dateRegex.test(previewAnswers[previewCurrentNodeId])) {
+        alert("Please enter a valid date (YYYY-MM-DD)")
+        return
+      }
+    }
+
+    let nextEdge: Edge | undefined
+
+    if (currentNode.data.type === "radio") {
+      const selectedOption = previewAnswers[previewCurrentNodeId]
+      if (selectedOption !== undefined) {
+        nextEdge = edges.find((e) => e.source === previewCurrentNodeId && e.sourceHandle === `option-${selectedOption}`)
+      }
+    } else {
+      nextEdge = edges.find((e) => e.source === previewCurrentNodeId)
+    }
+
+    if (!nextEdge) {
+      const endNode = nodes.find((n) => n.data.type === "end")
+      if (endNode) {
+        setPreviewCurrentNodeId(endNode.id)
+        if (!previewVisitedNodes.includes(endNode.id)) {
+          setPreviewVisitedNodes([...previewVisitedNodes, endNode.id])
+        }
+      }
+      return
+    }
+
+    setPreviewCurrentNodeId(nextEdge.target)
+    if (!previewVisitedNodes.includes(nextEdge.target)) {
+      setPreviewVisitedNodes([...previewVisitedNodes, nextEdge.target])
+    }
+  }
+
+  const handlePreviewPrevious = () => {
+    const currentIndex = previewVisitedNodes.indexOf(previewCurrentNodeId || "")
+    if (currentIndex > 0) {
+      setPreviewCurrentNodeId(previewVisitedNodes[currentIndex - 1])
+    }
+  }
+
+  const handlePreviewJumpTo = (nodeId: string) => {
+    setPreviewCurrentNodeId(nodeId)
+  }
+
+  const renderPreviewQuestion = () => {
+    if (!previewCurrentNodeId) return null
+
+    const currentNode = nodes.find((n) => n.id === previewCurrentNodeId)
+    if (!currentNode) return null
+
+    const currentAnswer = previewAnswers[previewCurrentNodeId]
+
+    if (currentNode.data.type === "end") {
+      return (
+        <div className="text-center space-y-4">
+          <div className="text-3xl font-bold">{currentNode.data.label}</div>
+          <p className="text-lg text-muted-foreground">{currentNode.data.description}</p>
+          <Check className="h-16 w-16 mx-auto text-green-500" />
         </div>
+      )
+    }
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Upload className="mr-2 h-4 w-4" />
-            Import
-          </Button>
-          <Button variant="outline" size="sm">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          <Button variant="outline" size="sm">
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </Button>
-          <Button variant="outline" size="sm">
-            <Play className="mr-2 h-4 w-4" />
-            Preview
-          </Button>
-          <Button size="sm">
-            <Save className="mr-2 h-4 w-4" />
-            Save Survey
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-80 border-r bg-muted/30">
-          <ScrollArea className="h-full">
-            <div className="p-6 space-y-6">
-              <div>
-                <h3 className="mb-3 text-base font-semibold">Question Types</h3>
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start bg-background hover:bg-accent"
-                    size="default"
-                    onClick={() => addNode("text")}
-                  >
-                    <FileText className="mr-3 h-5 w-5" />
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">Short Text</div>
-                      <div className="text-xs text-muted-foreground">Single line input</div>
-                    </div>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start bg-background hover:bg-accent"
-                    size="default"
-                    onClick={() => addNode("multiple-choice")}
-                  >
-                    <ListChecks className="mr-3 h-5 w-5" />
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">Multiple Choice</div>
-                      <div className="text-xs text-muted-foreground">Select one option</div>
-                    </div>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start bg-background hover:bg-accent"
-                    size="default"
-                    onClick={() => addNode("checkbox")}
-                  >
-                    <ToggleLeft className="mr-3 h-5 w-5" />
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">Checkbox</div>
-                      <div className="text-xs text-muted-foreground">Select multiple</div>
-                    </div>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start bg-background hover:bg-accent"
-                    size="default"
-                    onClick={() => addNode("dropdown")}
-                  >
-                    <ChevronDown className="mr-3 h-5 w-5" />
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">Dropdown</div>
-                      <div className="text-xs text-muted-foreground">Compact selection</div>
-                    </div>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start bg-background hover:bg-accent"
-                    size="default"
-                    onClick={() => addNode("scale")}
-                  >
-                    <Star className="mr-3 h-5 w-5" />
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">Rating Scale</div>
-                      <div className="text-xs text-muted-foreground">1-5 or 1-10 scale</div>
-                    </div>
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <h3 className="mb-3 text-base font-semibold">Control</h3>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start bg-background hover:bg-accent"
-                  size="default"
-                  onClick={() => addNode("end")}
-                >
-                  <Share2 className="mr-3 h-5 w-5" />
-                  <div className="flex-1 text-left">
-                    <div className="font-medium">End Node</div>
-                    <div className="text-xs text-muted-foreground">Survey completion</div>
-                  </div>
-                </Button>
-              </div>
-
-              <Separator />
-
-              <Card className="p-4 bg-background">
-                <h4 className="mb-3 text-sm font-semibold">Canvas Stats</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Questions</span>
-                    <span className="font-medium">{nodes.length - 1}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Connections</span>
-                    <span className="font-medium">{edges.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Selected</span>
-                    <span className="font-medium">{selectedNode ? "Yes" : "None"}</span>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-4 bg-muted">
-                <h4 className="mb-2 text-sm font-semibold">Instructions</h4>
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>• Click buttons to add nodes</li>
-                  <li>• Drag handles to connect</li>
-                  <li>• Click nodes to edit</li>
-                  <li>• Scroll/pinch to zoom</li>
-                  <li>• Drag canvas to pan</li>
-                </ul>
-              </Card>
-            </div>
-          </ScrollArea>
-        </div>
-
-        <div className="flex-1 bg-muted/10">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
-            minZoom={0.3}
-            maxZoom={2}
-          >
-            <Background gap={16} size={1} />
-            <Controls showInteractive={false} />
-            <Panel position="bottom-right" className="mb-4 mr-4">
-              <Card className="p-3">
-                <div className="text-sm text-muted-foreground">
-                  {nodes.length - 1} questions • {edges.length} connections
-                </div>
-              </Card>
-            </Panel>
-          </ReactFlow>
-        </div>
-
-        {selectedNode && (
-          <div className="w-[420px] border-l bg-background">
-            <ScrollArea className="h-full">
-              <div className="p-6 space-y-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold">Edit Question</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Configure question settings and options</p>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <Separator />
-
-                {selectedNode?.data.type !== "start" && selectedNode?.data.type !== "end" ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label className="text-base">Question Text</Label>
-                      <Textarea
-                        value={editingLabel}
-                        onChange={(e) => setEditingLabel(e.target.value)}
-                        placeholder="Enter your question..."
-                        rows={4}
-                        className="resize-none"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-base">Description</Label>
-                      <p className="text-sm text-muted-foreground">Optional context for respondents</p>
-                      <Input
-                        value={editingDescription}
-                        onChange={(e) => setEditingDescription(e.target.value)}
-                        placeholder="Add helpful context..."
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-base">Question Type</Label>
-                      <Select value={editingType} onValueChange={(value: QuestionType) => setEditingType(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="text">Short Text</SelectItem>
-                          <SelectItem value="multiple-choice">Multiple Choice</SelectItem>
-                          <SelectItem value="checkbox">Checkbox</SelectItem>
-                          <SelectItem value="dropdown">Dropdown</SelectItem>
-                          <SelectItem value="scale">Rating Scale</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="required" className="text-base">
-                          Required Question
-                        </Label>
-                        <p className="text-sm text-muted-foreground">Respondents must answer</p>
-                      </div>
-                      <Switch id="required" checked={editingRequired} onCheckedChange={setEditingRequired} />
-                    </div>
-
-                    {editingType !== "text" && editingType !== "scale" && (
-                      <>
-                        <Separator />
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <Label className="text-base">Answer Options</Label>
-                              <p className="text-sm text-muted-foreground mt-1">Define response choices</p>
-                            </div>
-                            <Button size="sm" variant="outline" onClick={addOption}>
-                              <Plus className="mr-1 h-4 w-4" />
-                              Add
-                            </Button>
-                          </div>
-
-                          <div className="space-y-2">
-                            {editingOptions.map((option, index) => (
-                              <div key={index} className="flex gap-2">
-                                <Input
-                                  value={option}
-                                  onChange={(e) => updateOption(index, e.target.value)}
-                                  placeholder={`Option ${index + 1}`}
-                                />
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => removeOption(index)}
-                                  disabled={editingOptions.length <= 2}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                      <Button onClick={updateNodeData} className="w-full" size="lg">
-                        <Save className="mr-2 h-4 w-4" />
-                        Save Changes
-                      </Button>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" onClick={duplicateSelectedNode}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
-                        </Button>
-                        <Button variant="destructive" onClick={deleteSelectedNode}>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <Card className="p-6 bg-muted text-center">
-                    <div className="space-y-2">
-                      <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-background">
-                        {selectedNode.data.type === "start" ? (
-                          <Play className="h-6 w-6 text-green-500" />
-                        ) : (
-                          <Share2 className="h-6 w-6 text-red-500" />
-                        )}
-                      </div>
-                      <h4 className="font-semibold">
-                        {selectedNode.data.type === "start" ? "Start Node" : "End Node"}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedNode.data.type === "start"
-                          ? "This is the survey entry point. Connect it to your first question to begin the flow."
-                          : "This is the survey completion point. Connect your final question here to end the flow."}
-                      </p>
-                    </div>
-                  </Card>
-                )}
-              </div>
-            </ScrollArea>
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <div className="text-2xl font-bold flex items-center gap-2">
+            {currentNode.data.label}
+            {currentNode.data.required && <Badge variant="destructive">Required</Badge>}
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
+          {currentNode.data.description && <p className="text-muted-foreground">{currentNode.data.description}</p>}
+        </div>
 
-export default function SurveyBuilderPageWrapper() {
+        <div className="space-y-4">
+          {currentNode.data.type === "text" && (
+            <Input
+              value={currentAnswer || ""}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              placeholder="Type your answer..."
+              className="text-lg"
+            />
+          )}
+
+          {currentNode.data.type === "textarea" && (
+            <Textarea
+              value={currentAnswer || ""}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              placeholder="Type your answer..."
+              rows={6}
+              className="text-lg"
+            />
+          )}
+
+          {currentNode.data.type === "email" && (
+            <Input
+              type="email"
+              value={currentAnswer || ""}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              placeholder="your@email.com"
+              className="text-lg"
+            />
+          )}
+
+          {currentNode.data.type === "number" && (
+            <Input
+              type="number"
+              value={currentAnswer || ""}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              placeholder="Enter a number..."
+              className="text-lg"
+            />
+          )}
+
+          {currentNode.data.type === "date" && (
+            <Input
+              type="date"
+              value={currentAnswer || ""}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              className="text-lg"
+            />
+          )}
+
+          {currentNode.data.type === "radio" && currentNode.data.options && (
+            <RadioGroup
+              value={currentAnswer?.toString()}
+              onValueChange={(value) =>
+                setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: Number.parseInt(value) })
+              }
+            >
+              {currentNode.data.options.map((option, idx) => (
+                <div key={idx} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer">
+                  <RadioGroupItem value={idx.toString()} id={`preview-option-${idx}`} />
+                  <Label htmlFor={`preview-option-${idx}`} className="text-lg cursor-pointer flex-1">
+                    {option}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          )}
+
+          {currentNode.data.type === "checkbox" && currentNode.data.options && (
+            <div className="space-y-3">
+              {currentNode.data.options.map((option, idx) => (
+                <div key={idx} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50">
+                  <Checkbox
+                    id={`preview-checkbox-${idx}`}
+                    checked={currentAnswer?.[idx] || false}
+                    onCheckedChange={(checked) => {
+                      const newAnswer = { ...(currentAnswer || {}) }
+                      newAnswer[idx] = checked
+                      setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: newAnswer })
+                    }}
+                  />
+                  <Label htmlFor={`preview-checkbox-${idx}`} className="text-lg cursor-pointer flex-1">
+                    {option}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {currentNode.data.type === "scale" && (
+            <div className="flex gap-2 justify-center">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <Button
+                  key={value}
+                  onClick={() => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: value })}
+                  variant={currentAnswer === value ? "default" : "outline"}
+                  size="lg"
+                  className="w-16 h-16 text-xl"
+                >
+                  {value}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {currentNode.data.type === "rating" && (
+            <div className="flex gap-2 justify-center">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <Button
+                  key={value}
+                  onClick={() => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: value })}
+                  variant="ghost"
+                  size="lg"
+                  className="p-2"
+                >
+                  <Star
+                    className={`h-10 w-10 ${
+                      currentAnswer && currentAnswer >= value ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+                    }`}
+                  />
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const handleSaveSurvey = () => {
+    setIsSaving(true)
+    setTimeout(() => {
+      setIsSaving(false)
+      setShowSaveDialog(false)
+      alert("Survey saved successfully!")
+    }, 1500)
+  }
+
+  const orderedQuestions = buildOrderedQuestionList()
+  const currentPreviewIndex = previewVisitedNodes.indexOf(previewCurrentNodeId || "")
+  const progressPercentage =
+    previewVisitedNodes.length > 0 ? (currentPreviewIndex / previewVisitedNodes.length) * 100 : 0
+
+  const getClosestHandle = (sourceNode: Node, targetNode: Node) => {
+    const dx = targetNode.position.x - sourceNode.position.x
+    const dy = targetNode.position.y - sourceNode.position.y
+
+    const absDx = Math.abs(dx)
+    const absDy = Math.abs(dy)
+
+    if (absDx > absDy) {
+      return dx > 0 ? "right" : "left"
+    } else {
+      return dy > 0 ? "bottom" : "top"
+    }
+  }
+
+  const handleAddNodeFromPlus = ({ nodeId, direction }: { nodeId: string; direction: string }) => {
+    setShowAddMenu(true)
+    setAddMenuNodeId(nodeId)
+    setAddMenuDirection(direction)
+
+    const sourceNode = nodes.find((n) => n.id === nodeId)
+    if (sourceNode) {
+      const viewport = document.querySelector(".react-flow__viewport")
+      if (viewport) {
+        const rect = viewport.getBoundingClientRect()
+        setAddMenuPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        })
+      }
+    }
+  }
+
   return (
     <ReactFlowProvider>
-      <SurveyBuilderPage />
+      <div className="h-screen w-screen flex flex-col bg-background">
+        <div className="flex items-center justify-between border-b p-4 bg-card">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              <Menu className="h-5 w-5" />
+            </Button>
+            <Link href="/admin">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <Input
+              value={surveyTitle}
+              onChange={(e) => setSurveyTitle(e.target.value)}
+              className="text-lg font-semibold border-0 focus-visible:ring-0 px-2"
+              placeholder="Survey Title"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </Button>
+            <Button variant="outline" size="sm" onClick={startPreview}>
+              <Play className="h-4 w-4 mr-2" />
+              Preview
+            </Button>
+            <Button size="sm" onClick={() => setShowSaveDialog(true)}>
+              <Save className="h-4 w-4 mr-2" />
+              Save Survey
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar */}
+          <div
+            className={
+              sidebarOpen
+                ? "h-full flex-shrink-0 bg-background border-r transition-all duration-300 w-64"
+                : "h-full flex-shrink-0 bg-background border-r transition-all duration-300 w-0 overflow-hidden"
+            }
+          >
+            <div className="flex flex-col h-full">
+              <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
+                <h3 className="font-semibold">Questions</h3>
+                <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </div>
+              <ScrollArea className="flex-1 h-0">
+                <div className="p-3 space-y-4">
+                  {Object.entries(QUESTION_CATEGORIES).map(([category, items]) => (
+                    <div key={category} className="space-y-2">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
+                        {category}
+                      </div>
+                      {items.map((item) => (
+                        <button
+                          key={item.type}
+                          onClick={() => {
+                            const position = { x: 400, y: 300 }
+                            addNode(item.type, position)
+                          }}
+                          className="w-full flex items-start gap-3 p-3 rounded-lg border bg-background hover:bg-accent hover:border-primary transition-colors text-left"
+                        >
+                          <item.icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm">{item.label}</div>
+                            <div className="text-xs text-muted-foreground">{item.description}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+
+          {!sidebarOpen && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSidebarOpen(true)}
+              className="absolute left-2 top-4 z-10 h-9 w-9"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+
+          <div className="flex-1 flex flex-col">
+            <div className="flex-1 relative">
+              <div className="flex-1 h-full">
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  onConnectStart={onConnectStart}
+                  onConnectEnd={onConnectEnd}
+                  onNodeClick={onNodeClick}
+                  nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
+                  fitView
+                  connectionRadius={50}
+                  // snapToGrid={false} // Removed snapToGrid as it was commented out and not explicitly updated
+                  defaultEdgeOptions={{
+                    type: "custom",
+                    animated: true,
+                    markerEnd: { type: MarkerType.ArrowClosed },
+                  }}
+                  proOptions={{ hideAttribution: true }}
+                  minZoom={0.2}
+                  maxZoom={4}
+                >
+                  <Background />
+                  <Controls />
+                  <MiniMap />
+                </ReactFlow>
+              </div>
+
+              {showAddMenu && (
+                <div
+                  className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
+                  onClick={() => setShowAddMenu(false)}
+                >
+                  <div
+                    className="bg-background border-2 border-border rounded-xl shadow-2xl flex flex-col w-[500px] max-w-[90vw] max-h-[809px]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-4 border-b bg-muted/50 flex-shrink-0">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Add Question</h3>
+                        <Button variant="ghost" size="icon" onClick={() => setShowAddMenu(false)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <ScrollArea className="flex-1 overflow-y-auto">
+                      <div className="p-4 space-y-6">
+                        {Object.entries(QUESTION_CATEGORIES).map(([category, questions]) => (
+                          <div key={category}>
+                            <h4 className="text-sm font-semibold text-muted-foreground mb-3">{category}</h4>
+                            <div className="grid gap-2">
+                              {questions.map((q) => {
+                                const Icon = q.icon
+                                return (
+                                  <button
+                                    key={q.type}
+                                    onClick={() => handleAddNode(q.type)}
+                                    className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent hover:border-primary transition-colors text-left w-full"
+                                  >
+                                    <div className="mt-0.5 flex-shrink-0">
+                                      <Icon className="h-5 w-5 text-primary" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-sm">{q.label}</div>
+                                      <div className="text-xs text-muted-foreground mt-0.5">{q.description}</div>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Sidebar */}
+          <div className="w-80 border-l bg-background flex-shrink-0 flex flex-col h-full">
+            <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
+              <h3 className="font-semibold">Edit Question</h3>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1 h-0 p-4">
+              {selectedNode ? (
+                <div className="space-y-4">
+                  {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Question Type</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { value: "text", label: "Text" },
+                            { value: "textarea", label: "Paragraph" },
+                            { value: "radio", label: "Single" },
+                            { value: "checkbox", label: "Multiple" },
+                            { value: "email", label: "Email" },
+                            { value: "number", label: "Number" },
+                            { value: "date", label: "Date" },
+                            { value: "scale", label: "Scale" },
+                            { value: "rating", label: "Rating" },
+                          ].map((type) => (
+                            <Button
+                              key={type.value}
+                              variant={editingType === type.value ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setEditingType(type.value as QuestionType)}
+                            >
+                              {type.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Question Label</Label>
+                        <Input value={editingLabel} onChange={(e) => setEditingLabel(e.target.value)} />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Description (Optional)</Label>
+                        <Textarea
+                          value={editingDescription}
+                          onChange={(e) => setEditingDescription(e.target.value)}
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Switch checked={editingRequired} onCheckedChange={setEditingRequired} id="required" />
+                        <Label htmlFor="required">Required</Label>
+                      </div>
+                    </>
+                  )}
+
+                  {(editingType === "radio" || editingType === "checkbox") && (
+                    <div className="space-y-2">
+                      <Label>Options</Label>
+                      <div className="space-y-2">
+                        {editingOptions.map((option, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <Input
+                              value={option}
+                              onChange={(e) => updateOption(idx, e.target.value)}
+                              placeholder={`Option ${idx + 1}`}
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => removeOption(idx)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button variant="outline" size="sm" onClick={addOption} className="w-full bg-transparent">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Option
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
+                    <div className="space-y-2 pt-4">
+                      <Button onClick={updateNodeData} className="w-full">
+                        <Check className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </Button>
+                      <Button variant="destructive" onClick={deleteSelectedNode} className="w-full">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Question
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center p-6 text-muted-foreground">
+                  <p className="text-sm">Select a question node to edit its properties</p>
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        </div>
+
+        <Dialog open={showSettings} onOpenChange={setShowSettings}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Survey Settings</DialogTitle>
+              <DialogDescription>Configure your survey preferences and messages</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Survey Description</Label>
+                <Textarea
+                  value={surveySettings.description}
+                  onChange={(e) => setSurveySettings({ ...surveySettings, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Welcome Message</Label>
+                <Textarea
+                  value={surveySettings.welcomeMessage}
+                  onChange={(e) => setSurveySettings({ ...surveySettings, welcomeMessage: e.target.value })}
+                  rows={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Thank You Message</Label>
+                <Textarea
+                  value={surveySettings.thankYouMessage}
+                  onChange={(e) => setSurveySettings({ ...surveySettings, thankYouMessage: e.target.value })}
+                  rows={2}
+                />
+              </div>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Allow Anonymous Responses</Label>
+                  <Switch
+                    checked={surveySettings.allowAnonymous}
+                    onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, allowAnonymous: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Show Progress Bar</Label>
+                  <Switch
+                    checked={surveySettings.showProgressBar}
+                    onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, showProgressBar: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Randomize Question Order</Label>
+                  <Switch
+                    checked={surveySettings.randomizeQuestions}
+                    onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, randomizeQuestions: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Allow Multiple Submissions</Label>
+                  <Switch
+                    checked={surveySettings.allowMultipleSubmissions}
+                    onCheckedChange={(checked) =>
+                      setSurveySettings({ ...surveySettings, allowMultipleSubmissions: checked })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSettings(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => setShowSettings(false)}>Save Settings</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save Survey</DialogTitle>
+              <DialogDescription>Review and save your survey configuration</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Survey Title</Label>
+                <Input value={surveyTitle} onChange={(e) => setSurveyTitle(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Total Questions</Label>
+                <div className="text-2xl font-bold">{orderedQuestions.filter((n) => n.data.type !== "end").length}</div>
+              </div>
+              {orderedQuestions.length === 0 && (
+                <div className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="h-5 w-5" />
+                  <span>No questions found. Please add questions before saving.</span>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveSurvey} disabled={isSaving || orderedQuestions.length === 0}>
+                {isSaving ? "Saving..." : "Save Survey"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showPreview} onOpenChange={setShowPreview}>
+          <DialogContent className="max-w-[70vw] h-[85vh] p-0 gap-0">
+            <div className="flex h-full">
+              <div
+                className={
+                  showPreviewSidebar
+                    ? "w-80 border-r transition-all duration-300 overflow-hidden flex flex-col"
+                    : "w-0 border-r transition-all duration-300 overflow-hidden flex flex-col"
+                }
+              >
+                <div className="p-4 border-b">
+                  <h3 className="font-semibold">Survey Navigation</h3>
+                </div>
+                <ScrollArea className="flex-1 h-0 p-4">
+                  <div className="space-y-2">
+                    {previewVisitedNodes.map((nodeId, index) => {
+                      const node = nodes.find((n) => n.id === nodeId)
+                      if (!node) return null
+                      return (
+                        <Button
+                          key={nodeId}
+                          variant={nodeId === previewCurrentNodeId ? "default" : "ghost"}
+                          className="w-full justify-start"
+                          onClick={() => handlePreviewJumpTo(nodeId)}
+                        >
+                          <span className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium">
+                            {index + 1}
+                          </span>
+                          {node.data.label}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              <div className="flex-1 flex flex-col">
+                <div className="p-4 border-b flex items-center justify-between bg-card">
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => setShowPreviewSidebar(!showPreviewSidebar)}>
+                      {showPreviewSidebar ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                    </Button>
+                    <h2 className="text-xl font-bold">{surveyTitle}</h2>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => setShowPreview(false)}>
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                {surveySettings.showProgressBar && (
+                  <div className="px-6 pt-4">
+                    <Progress value={progressPercentage} className="h-2" />
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Question {currentPreviewIndex + 1} of {previewVisitedNodes.length}
+                    </p>
+                  </div>
+                )}
+
+                <ScrollArea className="flex-1 p-6">
+                  <div className="max-w-3xl mx-auto">{renderPreviewQuestion()}</div>
+                </ScrollArea>
+
+                <div className="p-6 border-t bg-card flex justify-between">
+                  <Button variant="outline" onClick={handlePreviewPrevious} disabled={currentPreviewIndex <= 0}>
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Previous
+                  </Button>
+                  <Button onClick={handlePreviewNext}>
+                    Next
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
     </ReactFlowProvider>
   )
 }
+
+export default SurveyBuilderPage
