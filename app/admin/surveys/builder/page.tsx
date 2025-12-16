@@ -16,27 +16,15 @@ import ReactFlow, {
   applyNodeChanges,
   ReactFlowProvider,
   Background,
+  getConnectedEdges,
+  getIncomers,
+  getOutgoers,
+  useReactFlow, // Added useReactFlow for coordinate conversion
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Save,
-  Play,
-  Settings,
-  Menu,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Star,
-  Trash2,
-  Plus,
-  AlertCircle,
-} from "lucide-react"
-import Link from "next/link"
+import { X, ChevronLeft, ChevronRight, Check, Star, Trash2, Plus } from "lucide-react"
 import { QuestionNode, type QuestionNodeData, type QuestionType } from "@/components/survey-builder/question-node"
 import { CustomEdge } from "@/components/survey-builder/custom-edge"
 import { QUESTION_CATEGORIES } from "@/components/survey-builder/question-categories"
@@ -44,19 +32,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Separator } from "@/components/ui/separator"
-import { Progress } from "@/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils" // Assuming cn utility is available
 
 const initialNodes: Node<QuestionNodeData>[] = [
   {
@@ -79,7 +58,7 @@ const nodeTypes = {
   question: QuestionNode,
 }
 
-function SurveyBuilderPage() {
+function SurveyBuilderContent() {
   const [nodes, setNodes, _onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [surveyTitle, setSurveyTitle] = useState("Untitled Survey")
@@ -119,6 +98,38 @@ function SurveyBuilderPage() {
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({})
   const [previewVisitedNodes, setPreviewVisitedNodes] = useState<string[]>([])
   const [showPreviewSidebar, setShowPreviewSidebar] = useState(true)
+
+  const reactFlowInstance = useReactFlow()
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+  }, [])
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault()
+
+      const type = event.dataTransfer.getData("application/reactflow")
+
+      if (typeof type === "undefined" || !type) {
+        return
+      }
+
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      })
+
+      addNode(type as QuestionType, position)
+    },
+    [reactFlowInstance],
+  )
+
+  const onDragStart = (event: React.DragEvent, nodeType: string) => {
+    event.dataTransfer.setData("application/reactflow", nodeType)
+    event.dataTransfer.effectAllowed = "move"
+  }
 
   const handleInsertNodeOnEdge = useCallback(
     (edgeId: string, labelX: number, labelY: number) => {
@@ -178,6 +189,36 @@ function SurveyBuilderPage() {
     return () => window.removeEventListener("error", errorHandler)
   }, [])
 
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      // Get all edges that are not connected to any deleted nodes
+      const remainingEdges = edges.filter(
+        (edge) => !deleted.some((node) => edge.source === node.id || edge.target === node.id),
+      )
+
+      // For each deleted node, reconnect its incomers to its outgoers
+      const reconnectedEdges = deleted.flatMap((node) => {
+        const connectedEdges = getConnectedEdges([node], edges)
+        const incomers = getIncomers(node, nodes, edges)
+        const outgoers = getOutgoers(node, nodes, edges)
+
+        // Create new edges from each incomer to each outgoer
+        return incomers.flatMap(({ id: source }) =>
+          outgoers.map(({ id: target }) => ({
+            id: `edge-${Date.now()}-${Math.random()}`,
+            source,
+            target,
+            type: "custom",
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })),
+        )
+      })
+
+      setEdges([...remainingEdges, ...reconnectedEdges])
+    },
+    [nodes, edges, setEdges],
+  )
+
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
       const filteredChanges = changes.filter((change) => {
@@ -192,6 +233,37 @@ function SurveyBuilderPage() {
       setNodes((nds) => applyNodeChanges(filteredChanges, nds))
     },
     [nodes, setNodes],
+  )
+
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      // Prevent self-connections
+      if (connection.source === connection.target) {
+        return false
+      }
+
+      const target = nodes.find((node) => node.id === connection.target)
+      const hasCycle = (node: Node, visited = new Set<string>()) => {
+        if (visited.has(node.id)) return false
+
+        visited.add(node.id)
+
+        for (const outgoer of getOutgoers(node, nodes, edges)) {
+          if (outgoer.id === connection.source) return true
+          if (hasCycle(outgoer, visited)) return true
+        }
+
+        return false
+      }
+
+      if (target && hasCycle(target)) {
+        console.log("[v0] Connection would create a cycle - prevented")
+        return false
+      }
+
+      return true
+    },
+    [nodes, edges],
   )
 
   const onConnect = useCallback(
@@ -936,474 +1008,261 @@ function SurveyBuilderPage() {
   }
 
   return (
-    <ReactFlowProvider>
-      <div className="h-screen w-screen flex flex-col bg-background">
-        <div className="flex items-center justify-between border-b p-4 bg-card">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
-              <Menu className="h-5 w-5" />
-            </Button>
-            <Link href="/admin">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <Input
-              value={surveyTitle}
-              onChange={(e) => setSurveyTitle(e.target.value)}
-              className="text-lg font-semibold border-0 focus-visible:ring-0 px-2"
-              placeholder="Survey Title"
-            />
+    <div className="flex h-screen bg-background">
+      {/* Left Sidebar */}
+      <div
+        className={cn(
+          "border-r bg-muted/30 flex flex-col transition-all duration-300",
+          sidebarOpen ? "w-80" : "w-0 overflow-hidden",
+        )}
+      >
+        <div className="flex-none p-4 border-b flex items-center justify-between">
+          <h3 className="font-semibold">Questions</h3>
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </div>
+        <ScrollArea className="flex-1 h-0 p-4">
+          <div className="space-y-6">
+            {Object.entries(QUESTION_CATEGORIES).map(([category, items]) => (
+              <div key={category} className="space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
+                  {category}
+                </div>
+                {items.map((item) => (
+                  <button
+                    key={item.type}
+                    draggable
+                    onDragStart={(event) => onDragStart(event, item.type)}
+                    onClick={() => {
+                      const position = { x: 400, y: 300 }
+                      addNode(item.type, position)
+                    }}
+                    className="w-full flex items-start gap-3 p-3 rounded-lg border bg-background hover:bg-accent hover:border-primary transition-colors text-left cursor-grab active:cursor-grabbing"
+                  >
+                    <item.icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm">{item.label}</div>
+                      <div className="text-xs text-muted-foreground">{item.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </Button>
-            <Button variant="outline" size="sm" onClick={startPreview}>
-              <Play className="h-4 w-4 mr-2" />
-              Preview
-            </Button>
-            <Button size="sm" onClick={() => setShowSaveDialog(true)}>
-              <Save className="h-4 w-4 mr-2" />
-              Save Survey
-            </Button>
+        </ScrollArea>
+      </div>
+
+      {!sidebarOpen && (
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setSidebarOpen(true)}
+          className="absolute left-2 top-4 z-10 h-9 w-9"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      )}
+
+      {/* Main Canvas */}
+      <div className="flex-1 relative">
+        <div className="absolute inset-0 bg-background">
+          <div className="h-full w-full">
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onNodesDelete={onNodesDelete}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              isValidConnection={isValidConnection}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              connectionRadius={50}
+              onConnectStart={onConnectStart}
+              onConnectEnd={onConnectEnd}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              proOptions={{ hideAttribution: true }}
+              fitView
+              defaultEdgeOptions={{
+                type: "custom",
+                animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed },
+              }}
+              minZoom={0.2}
+              maxZoom={4}
+            >
+              <Background />
+              <Controls />
+              <MiniMap />
+            </ReactFlow>
           </div>
         </div>
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar */}
+        {showAddMenu && (
           <div
-            className={
-              sidebarOpen
-                ? "h-full flex-shrink-0 bg-background border-r transition-all duration-300 w-64"
-                : "h-full flex-shrink-0 bg-background border-r transition-all duration-300 w-0 overflow-hidden"
-            }
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
+            onClick={() => setShowAddMenu(false)}
           >
-            <div className="flex flex-col h-full">
-              <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
-                <h3 className="font-semibold">Questions</h3>
-                <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
+            <div
+              className="bg-background border-2 border-border rounded-xl shadow-2xl flex flex-col w-[500px] max-w-[90vw] max-h-[809px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b bg-muted/50 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Add Question</h3>
+                  <Button variant="ghost" size="icon" onClick={() => setShowAddMenu(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-              <ScrollArea className="flex-1 h-0">
-                <div className="p-3 space-y-4">
-                  {Object.entries(QUESTION_CATEGORIES).map(([category, items]) => (
-                    <div key={category} className="space-y-2">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
-                        {category}
+              <ScrollArea className="flex-1 overflow-y-auto">
+                <div className="p-4 space-y-6">
+                  {Object.entries(QUESTION_CATEGORIES).map(([category, questions]) => (
+                    <div key={category}>
+                      <h4 className="text-sm font-semibold text-muted-foreground mb-3">{category}</h4>
+                      <div className="grid gap-2">
+                        {questions.map((q) => {
+                          const Icon = q.icon
+                          return (
+                            <button
+                              key={q.type}
+                              onClick={() => handleAddNode(q.type)}
+                              className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent hover:border-primary transition-colors text-left w-full"
+                            >
+                              <div className="mt-0.5 flex-shrink-0">
+                                <Icon className="h-5 w-5 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm">{q.label}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">{q.description}</div>
+                              </div>
+                            </button>
+                          )
+                        })}
                       </div>
-                      {items.map((item) => (
-                        <button
-                          key={item.type}
-                          onClick={() => {
-                            const position = { x: 400, y: 300 }
-                            addNode(item.type, position)
-                          }}
-                          className="w-full flex items-start gap-3 p-3 rounded-lg border bg-background hover:bg-accent hover:border-primary transition-colors text-left"
-                        >
-                          <item.icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm">{item.label}</div>
-                            <div className="text-xs text-muted-foreground">{item.description}</div>
-                          </div>
-                        </button>
-                      ))}
                     </div>
                   ))}
                 </div>
               </ScrollArea>
             </div>
           </div>
-
-          {!sidebarOpen && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSidebarOpen(true)}
-              className="absolute left-2 top-4 z-10 h-9 w-9"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          )}
-
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 relative">
-              <div className="flex-1 h-full">
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  onConnectStart={onConnectStart}
-                  onConnectEnd={onConnectEnd}
-                  onNodeClick={onNodeClick}
-                  nodeTypes={nodeTypes}
-                  edgeTypes={edgeTypes}
-                  fitView
-                  connectionRadius={50}
-                  // snapToGrid={false} // Removed snapToGrid as it was commented out and not explicitly updated
-                  defaultEdgeOptions={{
-                    type: "custom",
-                    animated: true,
-                    markerEnd: { type: MarkerType.ArrowClosed },
-                  }}
-                  proOptions={{ hideAttribution: true }}
-                  minZoom={0.2}
-                  maxZoom={4}
-                >
-                  <Background />
-                  <Controls />
-                  <MiniMap />
-                </ReactFlow>
-              </div>
-
-              {showAddMenu && (
-                <div
-                  className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
-                  onClick={() => setShowAddMenu(false)}
-                >
-                  <div
-                    className="bg-background border-2 border-border rounded-xl shadow-2xl flex flex-col w-[500px] max-w-[90vw] max-h-[809px]"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="p-4 border-b bg-muted/50 flex-shrink-0">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">Add Question</h3>
-                        <Button variant="ghost" size="icon" onClick={() => setShowAddMenu(false)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <ScrollArea className="flex-1 overflow-y-auto">
-                      <div className="p-4 space-y-6">
-                        {Object.entries(QUESTION_CATEGORIES).map(([category, questions]) => (
-                          <div key={category}>
-                            <h4 className="text-sm font-semibold text-muted-foreground mb-3">{category}</h4>
-                            <div className="grid gap-2">
-                              {questions.map((q) => {
-                                const Icon = q.icon
-                                return (
-                                  <button
-                                    key={q.type}
-                                    onClick={() => handleAddNode(q.type)}
-                                    className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent hover:border-primary transition-colors text-left w-full"
-                                  >
-                                    <div className="mt-0.5 flex-shrink-0">
-                                      <Icon className="h-5 w-5 text-primary" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="font-medium text-sm">{q.label}</div>
-                                      <div className="text-xs text-muted-foreground mt-0.5">{q.description}</div>
-                                    </div>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Sidebar */}
-          <div className="w-80 border-l bg-background flex-shrink-0 flex flex-col h-full">
-            <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
-              <h3 className="font-semibold">Edit Question</h3>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <ScrollArea className="flex-1 h-0 p-4">
-              {selectedNode ? (
-                <div className="space-y-4">
-                  {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
-                    <>
-                      <div className="space-y-2">
-                        <Label>Question Type</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {[
-                            { value: "text", label: "Text" },
-                            { value: "textarea", label: "Paragraph" },
-                            { value: "radio", label: "Single" },
-                            { value: "checkbox", label: "Multiple" },
-                            { value: "email", label: "Email" },
-                            { value: "number", label: "Number" },
-                            { value: "date", label: "Date" },
-                            { value: "scale", label: "Scale" },
-                            { value: "rating", label: "Rating" },
-                          ].map((type) => (
-                            <Button
-                              key={type.value}
-                              variant={editingType === type.value ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setEditingType(type.value as QuestionType)}
-                            >
-                              {type.label}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Question Label</Label>
-                        <Input value={editingLabel} onChange={(e) => setEditingLabel(e.target.value)} />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Description (Optional)</Label>
-                        <Textarea
-                          value={editingDescription}
-                          onChange={(e) => setEditingDescription(e.target.value)}
-                          rows={3}
-                        />
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <Switch checked={editingRequired} onCheckedChange={setEditingRequired} id="required" />
-                        <Label htmlFor="required">Required</Label>
-                      </div>
-                    </>
-                  )}
-
-                  {(editingType === "radio" || editingType === "checkbox") && (
-                    <div className="space-y-2">
-                      <Label>Options</Label>
-                      <div className="space-y-2">
-                        {editingOptions.map((option, idx) => (
-                          <div key={idx} className="flex gap-2">
-                            <Input
-                              value={option}
-                              onChange={(e) => updateOption(idx, e.target.value)}
-                              placeholder={`Option ${idx + 1}`}
-                            />
-                            <Button variant="ghost" size="icon" onClick={() => removeOption(idx)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                      <Button variant="outline" size="sm" onClick={addOption} className="w-full bg-transparent">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Option
-                      </Button>
-                    </div>
-                  )}
-
-                  {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
-                    <div className="space-y-2 pt-4">
-                      <Button onClick={updateNodeData} className="w-full">
-                        <Check className="h-4 w-4 mr-2" />
-                        Save Changes
-                      </Button>
-                      <Button variant="destructive" onClick={deleteSelectedNode} className="w-full">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Question
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center p-6 text-muted-foreground">
-                  <p className="text-sm">Select a question node to edit its properties</p>
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-        </div>
-
-        <Dialog open={showSettings} onOpenChange={setShowSettings}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Survey Settings</DialogTitle>
-              <DialogDescription>Configure your survey preferences and messages</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Survey Description</Label>
-                <Textarea
-                  value={surveySettings.description}
-                  onChange={(e) => setSurveySettings({ ...surveySettings, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Welcome Message</Label>
-                <Textarea
-                  value={surveySettings.welcomeMessage}
-                  onChange={(e) => setSurveySettings({ ...surveySettings, welcomeMessage: e.target.value })}
-                  rows={2}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Thank You Message</Label>
-                <Textarea
-                  value={surveySettings.thankYouMessage}
-                  onChange={(e) => setSurveySettings({ ...surveySettings, thankYouMessage: e.target.value })}
-                  rows={2}
-                />
-              </div>
-              <Separator />
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label>Allow Anonymous Responses</Label>
-                  <Switch
-                    checked={surveySettings.allowAnonymous}
-                    onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, allowAnonymous: checked })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Show Progress Bar</Label>
-                  <Switch
-                    checked={surveySettings.showProgressBar}
-                    onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, showProgressBar: checked })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Randomize Question Order</Label>
-                  <Switch
-                    checked={surveySettings.randomizeQuestions}
-                    onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, randomizeQuestions: checked })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Allow Multiple Submissions</Label>
-                  <Switch
-                    checked={surveySettings.allowMultipleSubmissions}
-                    onCheckedChange={(checked) =>
-                      setSurveySettings({ ...surveySettings, allowMultipleSubmissions: checked })
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowSettings(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => setShowSettings(false)}>Save Settings</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Save Survey</DialogTitle>
-              <DialogDescription>Review and save your survey configuration</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Survey Title</Label>
-                <Input value={surveyTitle} onChange={(e) => setSurveyTitle(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Total Questions</Label>
-                <div className="text-2xl font-bold">{orderedQuestions.filter((n) => n.data.type !== "end").length}</div>
-              </div>
-              {orderedQuestions.length === 0 && (
-                <div className="flex items-center gap-2 text-destructive">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>No questions found. Please add questions before saving.</span>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveSurvey} disabled={isSaving || orderedQuestions.length === 0}>
-                {isSaving ? "Saving..." : "Save Survey"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={showPreview} onOpenChange={setShowPreview}>
-          <DialogContent className="max-w-[70vw] h-[85vh] p-0 gap-0">
-            <div className="flex h-full">
-              <div
-                className={
-                  showPreviewSidebar
-                    ? "w-80 border-r transition-all duration-300 overflow-hidden flex flex-col"
-                    : "w-0 border-r transition-all duration-300 overflow-hidden flex flex-col"
-                }
-              >
-                <div className="p-4 border-b">
-                  <h3 className="font-semibold">Survey Navigation</h3>
-                </div>
-                <ScrollArea className="flex-1 h-0 p-4">
-                  <div className="space-y-2">
-                    {previewVisitedNodes.map((nodeId, index) => {
-                      const node = nodes.find((n) => n.id === nodeId)
-                      if (!node) return null
-                      return (
-                        <Button
-                          key={nodeId}
-                          variant={nodeId === previewCurrentNodeId ? "default" : "ghost"}
-                          className="w-full justify-start"
-                          onClick={() => handlePreviewJumpTo(nodeId)}
-                        >
-                          <span className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium">
-                            {index + 1}
-                          </span>
-                          {node.data.label}
-                        </Button>
-                      )
-                    })}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              <div className="flex-1 flex flex-col">
-                <div className="p-4 border-b flex items-center justify-between bg-card">
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => setShowPreviewSidebar(!showPreviewSidebar)}>
-                      {showPreviewSidebar ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-                    </Button>
-                    <h2 className="text-xl font-bold">{surveyTitle}</h2>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => setShowPreview(false)}>
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-
-                {surveySettings.showProgressBar && (
-                  <div className="px-6 pt-4">
-                    <Progress value={progressPercentage} className="h-2" />
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Question {currentPreviewIndex + 1} of {previewVisitedNodes.length}
-                    </p>
-                  </div>
-                )}
-
-                <ScrollArea className="flex-1 p-6">
-                  <div className="max-w-3xl mx-auto">{renderPreviewQuestion()}</div>
-                </ScrollArea>
-
-                <div className="p-6 border-t bg-card flex justify-between">
-                  <Button variant="outline" onClick={handlePreviewPrevious} disabled={currentPreviewIndex <= 0}>
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Previous
-                  </Button>
-                  <Button onClick={handlePreviewNext}>
-                    Next
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        )}
       </div>
-    </ReactFlowProvider>
+
+      {/* Right Sidebar */}
+      <div className="w-80 border-l bg-background flex-shrink-0 flex flex-col h-full">
+        <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
+          <h3 className="font-semibold">Edit Question</h3>
+          <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <ScrollArea className="flex-1 h-0 p-4">
+          {selectedNode ? (
+            <div className="space-y-4">
+              {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Question Type</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: "text", label: "Text" },
+                        { value: "textarea", label: "Paragraph" },
+                        { value: "radio", label: "Single" },
+                        { value: "checkbox", label: "Multiple" },
+                        { value: "email", label: "Email" },
+                        { value: "number", label: "Number" },
+                        { value: "date", label: "Date" },
+                        { value: "scale", label: "Scale" },
+                        { value: "rating", label: "Rating" },
+                      ].map((type) => (
+                        <Button
+                          key={type.value}
+                          variant={editingType === type.value ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setEditingType(type.value as QuestionType)}
+                        >
+                          {type.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Question Label</Label>
+                    <Input value={editingLabel} onChange={(e) => setEditingLabel(e.target.value)} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Description (Optional)</Label>
+                    <Textarea
+                      value={editingDescription}
+                      onChange={(e) => setEditingDescription(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Switch checked={editingRequired} onCheckedChange={setEditingRequired} id="required" />
+                    <Label htmlFor="required">Required</Label>
+                  </div>
+                </>
+              )}
+
+              {(editingType === "radio" || editingType === "checkbox") && (
+                <div className="space-y-2">
+                  <Label>Options</Label>
+                  <div className="space-y-2">
+                    {editingOptions.map((option, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <Input
+                          value={option}
+                          onChange={(e) => updateOption(idx, e.target.value)}
+                          placeholder={`Option ${idx + 1}`}
+                        />
+                        <Button variant="ghost" size="icon" onClick={() => removeOption(idx)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={addOption} className="w-full bg-transparent">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Option
+                  </Button>
+                </div>
+              )}
+
+              {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
+                <div className="space-y-2 pt-4">
+                  <Button onClick={updateNodeData} className="w-full">
+                    <Check className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </Button>
+                  <Button variant="destructive" onClick={deleteSelectedNode} className="w-full">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Question
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center p-6 text-muted-foreground">
+              <p className="text-sm">Select a question node to edit its properties</p>
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+    </div>
   )
 }
 
-export default SurveyBuilderPage
+export default function SurveyBuilderPage() {
+  return (
+    <ReactFlowProvider>
+      <SurveyBuilderContent />
+    </ReactFlowProvider>
+  )
+}
