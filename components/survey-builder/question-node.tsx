@@ -13,7 +13,6 @@ import {
   Mail,
   Hash,
   Calendar,
-  Plus,
   Pencil,
 } from "lucide-react"
 
@@ -283,99 +282,6 @@ export const QuestionNode = ({ id, data, selected }: NodeProps<QuestionNodeData>
           </Button>
         )}
       </div>
-
-      {/* Plus buttons for adding nodes - not shown for single choice */}
-      {showPlusButtons && data.type !== "end" && data.type !== "radio" && (
-        <>
-          <Handle
-            type="source"
-            position={Position.Top}
-            id={`${id}-top`}
-            className="absolute -top-5 left-1/2 -translate-x-1/2 h-9 w-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg border-2 border-background flex items-center justify-center cursor-pointer z-10 opacity-100"
-            style={{ background: "hsl(var(--primary))", border: "2px solid hsl(var(--background))" }}
-            onMouseDown={(e) => {
-              const clickTime = Date.now()
-              ;(e.target as any).__clickTime = clickTime
-            }}
-            onMouseUp={(e) => {
-              const clickTime = (e.target as any).__clickTime
-              const now = Date.now()
-              if (now - clickTime < 200) {
-                e.stopPropagation()
-                ;(window as any).__triggerAddNode?.({ nodeId: id, direction: "top" })
-              }
-            }}
-          >
-            <Plus className="h-5 w-5 pointer-events-none" style={{ color: "hsl(var(--primary-foreground))" }} />
-          </Handle>
-
-          <Handle
-            type="source"
-            position={Position.Right}
-            id={`${id}-right`}
-            className="absolute top-1/2 -translate-y-1/2 -right-5 h-9 w-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg border-2 border-background flex items-center justify-center cursor-pointer z-10 opacity-100"
-            style={{ background: "hsl(var(--primary))", border: "2px solid hsl(var(--background))" }}
-            onMouseDown={(e) => {
-              const clickTime = Date.now()
-              ;(e.target as any).__clickTime = clickTime
-            }}
-            onMouseUp={(e) => {
-              const clickTime = (e.target as any).__clickTime
-              const now = Date.now()
-              if (now - clickTime < 200) {
-                e.stopPropagation()
-                ;(window as any).__triggerAddNode?.({ nodeId: id, direction: "right" })
-              }
-            }}
-          >
-            <Plus className="h-5 w-5 pointer-events-none" style={{ color: "hsl(var(--primary-foreground))" }} />
-          </Handle>
-
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id={`${id}-bottom`}
-            className="absolute -bottom-5 left-1/2 -translate-x-1/2 h-9 w-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg border-2 border-background flex items-center justify-center cursor-pointer z-10 opacity-100"
-            style={{ background: "hsl(var(--primary))", border: "2px solid hsl(var(--background))" }}
-            onMouseDown={(e) => {
-              const clickTime = Date.now()
-              ;(e.target as any).__clickTime = clickTime
-            }}
-            onMouseUp={(e) => {
-              const clickTime = (e.target as any).__clickTime
-              const now = Date.now()
-              if (now - clickTime < 200) {
-                e.stopPropagation()
-                ;(window as any).__triggerAddNode?.({ nodeId: id, direction: "bottom" })
-              }
-            }}
-          >
-            <Plus className="h-5 w-5 pointer-events-none" style={{ color: "hsl(var(--primary-foreground))" }} />
-          </Handle>
-
-          <Handle
-            type="source"
-            position={Position.Left}
-            id={`${id}-left`}
-            className="absolute top-1/2 -translate-y-1/2 -left-5 h-9 w-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg border-2 border-background flex items-center justify-center cursor-pointer z-10 opacity-100"
-            style={{ background: "hsl(var(--primary))", border: "2px solid hsl(var(--background))" }}
-            onMouseDown={(e) => {
-              const clickTime = Date.now()
-              ;(e.target as any).__clickTime = clickTime
-            }}
-            onMouseUp={(e) => {
-              const clickTime = (e.target as any).__clickTime
-              const now = Date.now()
-              if (now - clickTime < 200) {
-                e.stopPropagation()
-                ;(window as any).__triggerAddNode?.({ nodeId: id, direction: "left" })
-              }
-            }}
-          >
-            <Plus className="h-5 w-5 pointer-events-none" style={{ color: "hsl(var(--primary-foreground))" }} />
-          </Handle>
-        </>
-      )}
     </div>
   )
 }
