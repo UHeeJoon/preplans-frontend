@@ -272,11 +272,8 @@ function SurveyBuilderContent() {
       console.log("[v0] onConnect called", connection)
 
       const sourceNode = nodes.find((n) => n.id === connection.source)
-      const targetNode = nodes.find((n) => n.id === connection.target)
 
-      // Prevent self-connections
       if (connection.source === connection.target) {
-        console.log("[v0] Prevented self-connection")
         return
       }
 
@@ -285,11 +282,14 @@ function SurveyBuilderContent() {
         console.log("[v0] Start node: removing existing connections")
         setEdges((eds) => {
           const filtered = eds.filter((e) => e.source !== "start")
+          const edgeId = connection.sourceHandle
+            ? `e${connection.source}-${connection.sourceHandle}-${connection.target}`
+            : `e${connection.source}-${connection.target}`
           return [
             ...filtered,
             {
               ...connection,
-              id: `e${connection.source}-${connection.target}`,
+              id: edgeId,
               type: "custom",
               animated: true,
               markerEnd: { type: MarkerType.ArrowClosed },
@@ -304,11 +304,12 @@ function SurveyBuilderContent() {
           const filtered = eds.filter(
             (e) => !(e.source === connection.source && e.sourceHandle === connection.sourceHandle),
           )
+          const edgeId = `e${connection.source}-${connection.sourceHandle}-${connection.target}`
           return [
             ...filtered,
             {
               ...connection,
-              id: `e${connection.source}-${connection.target}`,
+              id: edgeId,
               type: "custom",
               animated: true,
               markerEnd: { type: MarkerType.ArrowClosed },
@@ -321,11 +322,14 @@ function SurveyBuilderContent() {
         console.log("[v0] Regular node: removing existing outgoing connections from", connection.source)
         setEdges((eds) => {
           const filtered = eds.filter((e) => e.source !== connection.source)
+          const edgeId = connection.sourceHandle
+            ? `e${connection.source}-${connection.sourceHandle}-${connection.target}`
+            : `e${connection.source}-${connection.target}`
           return [
             ...filtered,
             {
               ...connection,
-              id: `e${connection.source}-${connection.target}`,
+              id: edgeId,
               type: "custom",
               animated: true,
               markerEnd: { type: MarkerType.ArrowClosed },
@@ -381,36 +385,34 @@ function SurveyBuilderContent() {
   }
 
   useEffect(() => {
-    ;(window as any).__triggerAddNode = ({ nodeId, direction }: { nodeId: string; direction: string }) => {
-      console.log("[v0] __triggerAddNode called", { nodeId, direction })
-
-      setAddMenuContext({
-        type: "direction",
-        data: { nodeId, direction },
-      })
-
-      const sourceNode = nodes.find((n) => n.id === nodeId)
-      if (sourceNode) {
-        const viewport = document.querySelector(".react-flow__viewport")
-        if (viewport) {
-          const rect = viewport.getBoundingClientRect()
-          setAddMenuPosition({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-          })
-        }
+    ;(window as any).__triggerAddNode = (data: { nodeId: string; direction: string; optionIndex?: number }) => {
+      console.log("[v0] __triggerAddNode called", data)
+      const node = nodes.find((n) => n.id === data.nodeId)
+      if (node) {
+        const handlePosition = node.position
+        setAddMenuPosition({
+          x: handlePosition.x + (node.width || 280) / 2,
+          y: handlePosition.y + (node.height || 76) + 50,
+        })
+        setAddMenuContext({
+          type: "direction",
+          data: {
+            nodeId: data.nodeId,
+            direction: data.direction,
+            optionIndex: data.optionIndex,
+          },
+        })
+        setShowAddMenu(true)
       }
-
-      setShowAddMenu(true)
     }
 
     return () => {
-      delete (window as any).__triggerAddNode
+      ;(window as any).__triggerAddNode = undefined
     }
   }, [nodes])
 
   const handleAddNode = useCallback(
-    (type: QuestionType) => {
+    (type: string) => {
       console.log("[v0] handleAddNode called", { type, context: addMenuContext })
 
       const newId = `node-${Date.now()}`
@@ -469,6 +471,11 @@ function SurveyBuilderContent() {
         const closestSourceHandle = sourceHandle || `${sourceNode.id}-source-right`
         const closestTargetHandle = targetHandle || `${targetNode.id}-target-left`
 
+        const newNodeSourceHandle =
+          type === "radio"
+            ? `${newId}-option-0` // Radio nodes use option handles
+            : `${newId}-source-right` // Other nodes use regular source handles
+
         const edge1: Edge = {
           id: `edge-${newId}`,
           source: sourceNode.id,
@@ -477,7 +484,7 @@ function SurveyBuilderContent() {
           targetHandle: `${newId}-target-left`,
           type: "custom",
           animated: true,
-          markerEnd: { type: MarkerType.ArrowClosed },
+          markerEnd: { type: "arrowclosed" },
           data: {},
         }
 
@@ -485,30 +492,31 @@ function SurveyBuilderContent() {
           id: `edge-${newId + 1}`,
           source: newId,
           target: targetNode.id,
-          sourceHandle: `${newId}-source-right`,
+          sourceHandle: newNodeSourceHandle, // Use correct handle based on node type
           targetHandle: closestTargetHandle,
           type: "custom",
           animated: true,
-          markerEnd: { type: MarkerType.ArrowClosed },
+          markerEnd: { type: "arrowclosed" },
           data: {},
         }
 
         console.log("[v0] Creating A->C->B edges", { edge1, edge2 })
 
         setEdges((eds) => {
-          const filtered = eds.filter((e) => e.id !== edgeId)
-          console.log("[v0] Removed edge", edgeId, "remaining edges:", filtered.length)
-          return [...filtered, edge1, edge2]
+          const edgeToRemove = edgeId
+          const filteredEdges = eds.filter((e) => e.id !== edgeToRemove)
+          console.log("[v0] Removed edge", edgeToRemove, "remaining edges:", filteredEdges.length)
+          return [...filteredEdges, edge1, edge2]
         })
 
-        setShowAddMenu(false)
         setAddMenuContext(null)
+        setShowAddMenu(false)
         return
       } else if (addMenuContext?.type === "direction" && addMenuContext.data) {
-        const { nodeId, direction } = addMenuContext.data
+        const { nodeId, direction, optionIndex } = addMenuContext.data
         const sourceNode = nodes.find((n) => n.id === nodeId)
 
-        console.log("[v0] Direction context", { nodeId, direction, sourceNode })
+        console.log("[v0] Direction context", { nodeId, direction, optionIndex, sourceNode })
 
         if (sourceNode) {
           const offset = 250
@@ -527,7 +535,8 @@ function SurveyBuilderContent() {
               break
           }
 
-          const sourceHandle = `${nodeId}-source-${direction}`
+          const sourceHandle =
+            optionIndex !== undefined ? `${nodeId}-option-${optionIndex}` : `${nodeId}-source-${direction}`
           const oppositeDirection =
             direction === "top" ? "bottom" : direction === "bottom" ? "top" : direction === "left" ? "right" : "left"
           const targetHandle = `${newId}-target-${oppositeDirection}`
@@ -563,7 +572,7 @@ function SurveyBuilderContent() {
             if (sourceNode.data.type === "start") {
               console.log("[v0] Removing existing Start node edges")
               filteredEdges = eds.filter((e) => e.source !== nodeId)
-            } else if (sourceNode.data.type === "radio") {
+            } else if (sourceNode.data.type === "radio" && optionIndex !== undefined) {
               console.log("[v0] Removing existing radio option edge", sourceHandle)
               filteredEdges = eds.filter((e) => !(e.source === nodeId && e.sourceHandle === sourceHandle))
             } else {

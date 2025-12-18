@@ -170,6 +170,21 @@ export const QuestionNode = ({ id, data, selected }: NodeProps<QuestionNodeData>
                 : "!w-3 !h-3 !border-2 !border-primary !bg-background transition-opacity opacity-0"
             }
             style={{ top: "-6px" }}
+            onMouseDown={(e) => {
+              const clickTime = Date.now()
+              ;(e.target as any).__clickTime = clickTime
+            }}
+            onMouseUp={(e) => {
+              const clickTime = (e.target as any).__clickTime
+              const now = Date.now()
+              if (now - clickTime < 200) {
+                e.stopPropagation()
+                ;(window as any).__triggerAddNode?.({
+                  nodeId: id,
+                  direction: "top",
+                })
+              }
+            }}
           />
           <Handle
             type="source"
@@ -181,6 +196,21 @@ export const QuestionNode = ({ id, data, selected }: NodeProps<QuestionNodeData>
                 : "!w-3 !h-3 !border-2 !border-primary !bg-background transition-opacity opacity-0"
             }
             style={{ left: "-6px" }}
+            onMouseDown={(e) => {
+              const clickTime = Date.now()
+              ;(e.target as any).__clickTime = clickTime
+            }}
+            onMouseUp={(e) => {
+              const clickTime = (e.target as any).__clickTime
+              const now = Date.now()
+              if (now - clickTime < 200) {
+                e.stopPropagation()
+                ;(window as any).__triggerAddNode?.({
+                  nodeId: id,
+                  direction: "left",
+                })
+              }
+            }}
           />
           <Handle
             type="source"
@@ -192,6 +222,21 @@ export const QuestionNode = ({ id, data, selected }: NodeProps<QuestionNodeData>
                 : "!w-3 !h-3 !border-2 !border-primary !bg-background transition-opacity opacity-0"
             }
             style={{ right: "-6px" }}
+            onMouseDown={(e) => {
+              const clickTime = Date.now()
+              ;(e.target as any).__clickTime = clickTime
+            }}
+            onMouseUp={(e) => {
+              const clickTime = (e.target as any).__clickTime
+              const now = Date.now()
+              if (now - clickTime < 200) {
+                e.stopPropagation()
+                ;(window as any).__triggerAddNode?.({
+                  nodeId: id,
+                  direction: "right",
+                })
+              }
+            }}
           />
           <Handle
             type="source"
@@ -203,6 +248,21 @@ export const QuestionNode = ({ id, data, selected }: NodeProps<QuestionNodeData>
                 : "!w-3 !h-3 !border-2 !border-primary !bg-background transition-opacity opacity-0"
             }
             style={{ bottom: "-6px" }}
+            onMouseDown={(e) => {
+              const clickTime = Date.now()
+              ;(e.target as any).__clickTime = clickTime
+            }}
+            onMouseUp={(e) => {
+              const clickTime = (e.target as any).__clickTime
+              const now = Date.now()
+              if (now - clickTime < 200) {
+                e.stopPropagation()
+                ;(window as any).__triggerAddNode?.({
+                  nodeId: id,
+                  direction: "bottom",
+                })
+              }
+            }}
           />
         </>
       )}
