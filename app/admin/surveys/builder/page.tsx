@@ -24,7 +24,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { X, ChevronLeft, ChevronRight, Check, Star, Trash2, Plus, Settings, Play, Save } from "lucide-react"
+import { X, ChevronLeft, ChevronRight, Check, Star, Trash2, Plus, Settings, Play, Save, ArrowLeft } from "lucide-react" // Added ArrowLeft
 import { QuestionNode, type QuestionNodeData, type QuestionType } from "@/components/survey-builder/question-node"
 import { CustomEdge } from "@/components/survey-builder/custom-edge"
 import { QUESTION_CATEGORIES } from "@/components/survey-builder/question-categories"
@@ -36,7 +36,15 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils" // Assuming cn utility is available
-import { Dialog, DialogContent, DialogHeader, DialogClose } from "@/components/ui/dialog" // Added Dialog imports
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog" // Added Dialog imports
+import Link from "next/link" // Added Link
 
 const initialNodes: Node<QuestionNodeData>[] = [
   {
@@ -99,6 +107,7 @@ function SurveyBuilderContent() {
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({})
   const [previewVisitedNodes, setPreviewVisitedNodes] = useState<string[]>([])
   const [showPreviewSidebar, setShowPreviewSidebar] = useState(true)
+  const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0) // Added for Sheet navigation
 
   const reactFlowInstance = useReactFlow()
 
@@ -614,6 +623,7 @@ function SurveyBuilderContent() {
     setEditingRequired(node.data.required || false)
     setEditingDescription(node.data.description || "")
     setEditingOptions(node.data.options || [])
+    setCurrentPreviewIndex(0) // Reset preview index when node is selected
   }, [])
 
   const updateNodeData = () => {
@@ -740,6 +750,7 @@ function SurveyBuilderContent() {
     setPreviewAnswers({})
     setPreviewVisitedNodes([nextEdge.target])
     setShowPreview(true)
+    setCurrentPreviewIndex(0) // Reset index when starting preview
   }
 
   const handlePreviewNext = () => {
@@ -806,6 +817,13 @@ function SurveyBuilderContent() {
     if (!previewVisitedNodes.includes(nextEdge.target)) {
       setPreviewVisitedNodes([...previewVisitedNodes, nextEdge.target])
     }
+
+    // Update current preview index for Sheet navigation
+    const orderedQuestions = buildOrderedQuestionList()
+    const nextNodeIndex = orderedQuestions.findIndex((node) => node.id === nextEdge.target)
+    if (nextNodeIndex !== -1) {
+      setCurrentPreviewIndex(nextNodeIndex)
+    }
   }
 
   const handlePreviewPrevious = () => {
@@ -813,25 +831,33 @@ function SurveyBuilderContent() {
     if (currentIndex > 0) {
       setPreviewCurrentNodeId(previewVisitedNodes[currentIndex - 1])
     }
+
+    // Update current preview index for Sheet navigation
+    const orderedQuestions = buildOrderedQuestionList()
+    const previousNodeIndex = orderedQuestions.findIndex((node) => node.id === previewVisitedNodes[currentIndex - 1])
+    if (previousNodeIndex !== -1) {
+      setCurrentPreviewIndex(previousNodeIndex)
+    }
   }
 
   const handlePreviewJumpTo = (nodeId: string) => {
     setPreviewCurrentNodeId(nodeId)
+    // Update current preview index for Sheet navigation
+    const orderedQuestions = buildOrderedQuestionList()
+    const targetNodeIndex = orderedQuestions.findIndex((node) => node.id === nodeId)
+    if (targetNodeIndex !== -1) {
+      setCurrentPreviewIndex(targetNodeIndex)
+    }
   }
 
-  const renderPreviewQuestion = () => {
-    if (!previewCurrentNodeId) return null
+  const renderPreviewQuestion = (node: Node<QuestionNodeData>) => {
+    const currentAnswer = previewAnswers[node.id]
 
-    const currentNode = nodes.find((n) => n.id === previewCurrentNodeId)
-    if (!currentNode) return null
-
-    const currentAnswer = previewAnswers[previewCurrentNodeId]
-
-    if (currentNode.data.type === "end") {
+    if (node.data.type === "end") {
       return (
         <div className="text-center space-y-4">
-          <div className="text-3xl font-bold">{currentNode.data.label}</div>
-          <p className="text-lg text-muted-foreground">{currentNode.data.description}</p>
+          <div className="text-3xl font-bold">{node.data.label}</div>
+          <p className="text-lg text-muted-foreground">{node.data.description}</p>
           <Check className="h-16 w-16 mx-auto text-green-500" />
         </div>
       )
@@ -841,69 +867,67 @@ function SurveyBuilderContent() {
       <div className="space-y-6">
         <div className="space-y-2">
           <div className="text-2xl font-bold flex items-center gap-2">
-            {currentNode.data.label}
-            {currentNode.data.required && <Badge variant="destructive">Required</Badge>}
+            {node.data.label}
+            {node.data.required && <Badge variant="destructive">Required</Badge>}
           </div>
-          {currentNode.data.description && <p className="text-muted-foreground">{currentNode.data.description}</p>}
+          {node.data.description && <p className="text-muted-foreground">{node.data.description}</p>}
         </div>
 
         <div className="space-y-4">
-          {currentNode.data.type === "text" && (
+          {node.data.type === "text" && (
             <Input
               value={currentAnswer || ""}
-              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [node.id]: e.target.value })}
               placeholder="Type your answer..."
               className="text-lg"
             />
           )}
 
-          {currentNode.data.type === "textarea" && (
+          {node.data.type === "textarea" && (
             <Textarea
               value={currentAnswer || ""}
-              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [node.id]: e.target.value })}
               placeholder="Type your answer..."
               rows={6}
               className="text-lg"
             />
           )}
 
-          {currentNode.data.type === "email" && (
+          {node.data.type === "email" && (
             <Input
               type="email"
               value={currentAnswer || ""}
-              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [node.id]: e.target.value })}
               placeholder="your@email.com"
               className="text-lg"
             />
           )}
 
-          {currentNode.data.type === "number" && (
+          {node.data.type === "number" && (
             <Input
               type="number"
               value={currentAnswer || ""}
-              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [node.id]: e.target.value })}
               placeholder="Enter a number..."
               className="text-lg"
             />
           )}
 
-          {currentNode.data.type === "date" && (
+          {node.data.type === "date" && (
             <Input
               type="date"
               value={currentAnswer || ""}
-              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: e.target.value })}
+              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [node.id]: e.target.value })}
               className="text-lg"
             />
           )}
 
-          {currentNode.data.type === "radio" && currentNode.data.options && (
+          {node.data.type === "radio" && node.data.options && (
             <RadioGroup
               value={currentAnswer?.toString()}
-              onValueChange={(value) =>
-                setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: Number.parseInt(value) })
-              }
+              onValueChange={(value) => setPreviewAnswers({ ...previewAnswers, [node.id]: Number.parseInt(value) })}
             >
-              {currentNode.data.options.map((option, idx) => (
+              {node.data.options.map((option, idx) => (
                 <div key={idx} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer">
                   <RadioGroupItem value={idx.toString()} id={`preview-option-${idx}`} />
                   <Label htmlFor={`preview-option-${idx}`} className="text-lg cursor-pointer flex-1">
@@ -914,9 +938,9 @@ function SurveyBuilderContent() {
             </RadioGroup>
           )}
 
-          {currentNode.data.type === "checkbox" && currentNode.data.options && (
+          {node.data.type === "checkbox" && node.data.options && (
             <div className="space-y-3">
-              {currentNode.data.options.map((option, idx) => (
+              {node.data.options.map((option, idx) => (
                 <div key={idx} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50">
                   <Checkbox
                     id={`preview-checkbox-${idx}`}
@@ -924,7 +948,7 @@ function SurveyBuilderContent() {
                     onCheckedChange={(checked) => {
                       const newAnswer = { ...(currentAnswer || {}) }
                       newAnswer[idx] = checked
-                      setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: newAnswer })
+                      setPreviewAnswers({ ...previewAnswers, [node.id]: newAnswer })
                     }}
                   />
                   <Label htmlFor={`preview-checkbox-${idx}`} className="text-lg cursor-pointer flex-1">
@@ -935,12 +959,12 @@ function SurveyBuilderContent() {
             </div>
           )}
 
-          {currentNode.data.type === "scale" && (
+          {node.data.type === "scale" && (
             <div className="flex gap-2 justify-center">
               {[1, 2, 3, 4, 5].map((value) => (
                 <Button
                   key={value}
-                  onClick={() => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: value })}
+                  onClick={() => setPreviewAnswers({ ...previewAnswers, [node.id]: value })}
                   variant={currentAnswer === value ? "default" : "outline"}
                   size="lg"
                   className="w-16 h-16 text-xl"
@@ -951,12 +975,12 @@ function SurveyBuilderContent() {
             </div>
           )}
 
-          {currentNode.data.type === "rating" && (
+          {node.data.type === "rating" && (
             <div className="flex gap-2 justify-center">
               {[1, 2, 3, 4, 5].map((value) => (
                 <Button
                   key={value}
-                  onClick={() => setPreviewAnswers({ ...previewAnswers, [previewCurrentNodeId]: value })}
+                  onClick={() => setPreviewAnswers({ ...previewAnswers, [node.id]: value })}
                   variant="ghost"
                   size="lg"
                   className="p-2"
@@ -986,8 +1010,14 @@ function SurveyBuilderContent() {
 
   const orderedQuestions = buildOrderedQuestionList()
   const totalQuestions = orderedQuestions.filter((n) => n.data.type !== "end").length
-  const answeredQuestions = Object.keys(previewAnswers).length
-  const progressPercentage = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0
+  const answeredQuestions = Object.keys(previewAnswers).filter((key) =>
+    orderedQuestions.some((q) => q.id === key && q.data.type !== "end"),
+  ).length // Only count answered actual questions
+  const progressPercentage = surveySettings.showProgressBar
+    ? totalQuestions > 0
+      ? Math.round((answeredQuestions / totalQuestions) * 100)
+      : 0
+    : 0
 
   const getClosestHandle = (sourceNode: Node, targetNode: Node) => {
     const dx = targetNode.position.x - sourceNode.position.x
@@ -1021,14 +1051,27 @@ function SurveyBuilderContent() {
     }
   }
 
+  // Getter for the current node in the preview
+  const currentPreviewNode = orderedQuestions[currentPreviewIndex]
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Top Navigation Bar */}
       <div className="flex-none h-14 border-b bg-background flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
+          <Link href="/admin/surveys">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
           <h1 className="text-lg font-semibold">Survey Builder</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/admin/surveys">
+            <Button variant="outline" size="sm">
+              취소
+            </Button>
+          </Link>
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
             <Settings className="h-4 w-4 mr-2" />
             Settings
@@ -1299,39 +1342,42 @@ function SurveyBuilderContent() {
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Survey Settings</h2>
-              <DialogClose asChild>
-                <Button variant="ghost" size="icon">
-                  <X className="h-4 w-4" />
-                </Button>
-              </DialogClose>
-            </div>
+            <DialogTitle>Survey Settings</DialogTitle>
+            <DialogDescription>Configure your survey settings and preferences</DialogDescription>
           </DialogHeader>
-          <div className="p-4 space-y-4">
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Survey Title</Label>
-              <Input value={surveyTitle} onChange={(e) => setSurveyTitle(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea
-                value={surveySettings.description}
-                onChange={(e) => setSurveySettings({ ...surveySettings, description: e.target.value })}
-                rows={3}
+              <Label htmlFor="survey-title">Survey Title</Label>
+              <Input
+                id="survey-title"
+                value={surveyTitle}
+                onChange={(e) => setSurveyTitle(e.target.value)}
+                placeholder="Enter survey title"
               />
             </div>
             <div className="space-y-2">
-              <Label>Welcome Message</Label>
+              <Label htmlFor="survey-description">Description</Label>
               <Textarea
+                id="survey-description"
+                value={surveySettings.description}
+                onChange={(e) => setSurveySettings({ ...surveySettings, description: e.target.value })}
+                rows={3}
+                placeholder="Enter survey description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="welcome-message">Welcome Message</Label>
+              <Textarea
+                id="welcome-message"
                 value={surveySettings.welcomeMessage}
                 onChange={(e) => setSurveySettings({ ...surveySettings, welcomeMessage: e.target.value })}
                 rows={2}
               />
             </div>
             <div className="space-y-2">
-              <Label>Thank You Message</Label>
+              <Label htmlFor="thank-you-message">Thank You Message</Label>
               <Textarea
+                id="thank-you-message"
                 value={surveySettings.thankYouMessage}
                 onChange={(e) => setSurveySettings({ ...surveySettings, thankYouMessage: e.target.value })}
                 rows={2}
@@ -1339,29 +1385,33 @@ function SurveyBuilderContent() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Allow Anonymous Responses</Label>
+                <Label htmlFor="allow-anonymous">Allow Anonymous Responses</Label>
                 <Switch
+                  id="allow-anonymous"
                   checked={surveySettings.allowAnonymous}
                   onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, allowAnonymous: checked })}
                 />
               </div>
               <div className="flex items-center justify-between">
-                <Label>Show Progress Bar</Label>
+                <Label htmlFor="show-progress">Show Progress Bar</Label>
                 <Switch
+                  id="show-progress"
                   checked={surveySettings.showProgressBar}
                   onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, showProgressBar: checked })}
                 />
               </div>
               <div className="flex items-center justify-between">
-                <Label>Randomize Questions</Label>
+                <Label htmlFor="randomize">Randomize Questions</Label>
                 <Switch
+                  id="randomize"
                   checked={surveySettings.randomizeQuestions}
                   onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, randomizeQuestions: checked })}
                 />
               </div>
               <div className="flex items-center justify-between">
-                <Label>Allow Multiple Submissions</Label>
+                <Label htmlFor="multiple-submissions">Allow Multiple Submissions</Label>
                 <Switch
+                  id="multiple-submissions"
                   checked={surveySettings.allowMultipleSubmissions}
                   onCheckedChange={(checked) =>
                     setSurveySettings({ ...surveySettings, allowMultipleSubmissions: checked })
@@ -1370,11 +1420,105 @@ function SurveyBuilderContent() {
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-2 p-4 border-t">
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettings(false)}>
+              Cancel
+            </Button>
             <Button onClick={() => setShowSettings(false)}>Save Settings</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle>{surveyTitle}</DialogTitle>
+            <DialogDescription>{surveySettings.description || "Preview your survey flow"}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 flex overflow-hidden">
+            {/* Navigation Sidebar */}
+            <div className="w-64 border-r flex flex-col">
+              <div className="p-4 border-b">
+                <h3 className="font-semibold">Navigation</h3>
+              </div>
+              <ScrollArea className="flex-1 h-0">
+                <div className="p-2 space-y-1">
+                  {orderedQuestions.map((node, index) => (
+                    <button
+                      key={node.id}
+                      onClick={() => setCurrentPreviewIndex(index)}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                        currentPreviewIndex === index ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                      } ${previewAnswers[node.id] ? "flex items-center justify-between" : ""}`}
+                    >
+                      <span>{node.data.label || node.data.question || "Question"}</span>
+                      {previewAnswers[node.id] && <Check className="h-4 w-4 ml-2 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 flex flex-col">
+              {currentPreviewNode ? (
+                <>
+                  {/* Progress Bar */}
+                  {surveySettings.showProgressBar && (
+                    <div className="p-4 border-b">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Progress</span>
+                        <span className="text-sm text-muted-foreground">{progressPercentage}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${progressPercentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Welcome Message */}
+                  {currentPreviewIndex === 0 && surveySettings.welcomeMessage && (
+                    <div className="p-4 bg-muted/30 border-b">
+                      <p className="text-sm">{surveySettings.welcomeMessage}</p>
+                    </div>
+                  )}
+
+                  {/* Question Content */}
+                  <ScrollArea className="flex-1">
+                    <div className="p-6">{renderPreviewQuestion(currentPreviewNode)}</div>
+                  </ScrollArea>
+
+                  {/* Navigation Buttons */}
+                  <div className="p-4 border-t flex justify-between">
+                    <Button
+                      variant="outline"
+                      onClick={handlePreviewPrevious}
+                      disabled={currentPreviewIndex === 0 || orderedQuestions.length === 0}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-2" />
+                      Previous
+                    </Button>
+                    <Button onClick={handlePreviewNext} disabled={currentPreviewNode?.data.type === "end"}>
+                      {currentPreviewNode?.data.type === "end" ? "Finish" : "Next"}
+                      <ChevronRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold mb-2">Survey Complete</h3>
+                    <p className="text-muted-foreground mb-4">{surveySettings.thankYouMessage}</p>
+                    <Button onClick={() => setShowPreview(false)}>Close Preview</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1394,93 +1538,6 @@ function SurveyBuilderContent() {
               <Button onClick={handleSaveSurvey} disabled={isSaving}>
                 {isSaving ? "Saving..." : "Save Survey"}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Preview Panel */}
-      {showPreview && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg shadow-lg w-full max-w-4xl h-[80vh] flex">
-            {/* Preview Navigation Sidebar */}
-            <div
-              className={cn(
-                "border-r bg-muted/30 flex flex-col transition-all duration-300",
-                showPreviewSidebar ? "w-64" : "w-0 overflow-hidden",
-              )}
-            >
-              <div className="flex-none p-4 border-b flex items-center justify-between">
-                <h3 className="font-semibold">Navigation</h3>
-                <Button variant="ghost" size="icon" onClick={() => setShowPreviewSidebar(false)}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-              </div>
-              <ScrollArea className="flex-1 h-0 p-4">
-                <div className="space-y-2">
-                  {orderedQuestions.map((node) => (
-                    <Button
-                      key={node.id}
-                      variant={previewCurrentNodeId === node.id ? "default" : "ghost"}
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => handlePreviewJumpTo(node.id)}
-                    >
-                      {previewVisitedNodes.includes(node.id) && <Check className="h-4 w-4 mr-2" />}
-                      {node.data.label}
-                    </Button>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
-
-            {/* Preview Content */}
-            <div className="flex-1 flex flex-col">
-              <div className="flex-none p-4 border-b flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {!showPreviewSidebar && (
-                    <Button variant="ghost" size="icon" onClick={() => setShowPreviewSidebar(true)}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <h2 className="text-lg font-semibold">Survey Preview</h2>
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => setShowPreview(false)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {surveySettings.showProgressBar && (
-                <div className="flex-none px-4 py-2 border-b">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span>Progress</span>
-                    <span>{Math.round(progressPercentage)}%</span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div
-                      className="bg-primary h-2 rounded-full transition-all"
-                      style={{ width: `${progressPercentage}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex-1 overflow-y-auto p-6">{renderPreviewQuestion()}</div>
-
-              <div className="flex-none p-4 border-t flex justify-between">
-                <Button
-                  variant="outline"
-                  onClick={handlePreviewPrevious}
-                  disabled={previewVisitedNodes.indexOf(previewCurrentNodeId || "") === 0}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Previous
-                </Button>
-                <Button onClick={handlePreviewNext}>
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
             </div>
           </div>
         </div>

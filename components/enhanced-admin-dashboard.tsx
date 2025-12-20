@@ -32,7 +32,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CreateEventDialog } from "./admin/create-event-dialog"
 import { EventDetailsSheet } from "./admin/event-details-sheet"
 import { UserFormDialog } from "./admin/user-form-dialog"
 import { ReportGeneratorDialog } from "./admin/report-generator-dialog"
@@ -186,7 +185,6 @@ const recentUsers = [
 
 export function EnhancedAdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview")
-  const [createEventOpen, setCreateEventOpen] = useState(false)
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false)
   const [userFormOpen, setUserFormOpen] = useState(false)
   const [reportGeneratorOpen, setReportGeneratorOpen] = useState(false)
@@ -195,7 +193,7 @@ export function EnhancedAdminDashboard() {
   const [surveyResultsOpen, setSurveyResultsOpen] = useState(false)
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex min-h-screen w-full overflow-hidden bg-background">
       {/* Sidebar Navigation */}
       <aside className="sticky top-0 hidden h-screen w-64 border-r border-border bg-card lg:block">
         <div className="flex h-full flex-col">
@@ -463,7 +461,7 @@ export function EnhancedAdminDashboard() {
                       <Upload className="mr-2 h-4 w-4" />
                       Import
                     </Button>
-                    <Button onClick={() => setCreateEventOpen(true)}>
+                    <Button onClick={() => (window.location.href = "/admin/events/create")}>
                       <Plus className="mr-2 h-4 w-4" />
                       Create Event
                     </Button>
@@ -917,7 +915,6 @@ export function EnhancedAdminDashboard() {
       </div>
 
       {/* Dialogs and Sheets */}
-      <CreateEventDialog open={createEventOpen} onOpenChange={setCreateEventOpen} />
       <EventDetailsSheet open={eventDetailsOpen} onOpenChange={setEventDetailsOpen} />
       <UserFormDialog open={userFormOpen} onOpenChange={setUserFormOpen} />
       <ReportGeneratorDialog open={reportGeneratorOpen} onOpenChange={setReportGeneratorOpen} />
