@@ -427,9 +427,9 @@ export default function CreateEventPage() {
                   <Accordion type="multiple" className="space-y-2 mb-8">
                     {timeSlots.map((slot, index) => (
                       <AccordionItem key={slot.id} value={slot.id} className="border border-b rounded-lg">
-                        <div className="flex items-center justify-between pr-2">
-                          <AccordionTrigger className="flex-1 px-4 hover:no-underline [&>svg]:hidden">
-                            <div className="flex items-center gap-3">
+                        <div className="relative flex items-center">
+                          <AccordionTrigger className="flex-1 px-4 pr-12 hover:no-underline [&>svg]:hidden">
+                            <div className="flex items-center gap-3 w-full">
                               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium text-sm">
                                 {index + 1}
                               </div>
@@ -458,7 +458,7 @@ export default function CreateEventPage() {
                             </div>
                           </AccordionTrigger>
                           <button
-                            className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0 z-10"
                             onClick={(e) => {
                               e.stopPropagation()
                               removeTimeSlot(slot.id)
@@ -469,6 +469,7 @@ export default function CreateEventPage() {
                             <X className="h-4 w-4" />
                           </button>
                         </div>
+
                         {/* </CHANGE> */}
                         <AccordionContent className="px-4 pb-4">
                           <div className="space-y-3 pt-2">
