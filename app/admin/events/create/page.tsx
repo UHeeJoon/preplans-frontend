@@ -189,7 +189,7 @@ export default function CreateEventPage() {
       bookingConstraints,
       recurrence,
     })
-    router.push("/admin")
+    router.push("/admin/events")
   }
 
   return (

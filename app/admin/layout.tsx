@@ -4,13 +4,24 @@ import type React from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Calendar, CheckCircle2, ClipboardList, Users, FileText, Bell, LayoutDashboard, Settings } from "lucide-react"
+import {
+  Calendar,
+  CheckCircle2,
+  ClipboardList,
+  Users,
+  FileText,
+  Bell,
+  LayoutDashboard,
+  Settings,
+  FolderKanban,
+} from "lucide-react"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
 
   const navItems = [
+    { label: "Projects", icon: FolderKanban, href: "/admin/projects" },
     { label: "Overview", icon: LayoutDashboard, href: "/admin" },
     { label: "Events", icon: Calendar, href: "/admin/events" },
     { label: "Bookings", icon: CheckCircle2, href: "/admin/bookings" },

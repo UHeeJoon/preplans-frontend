@@ -111,6 +111,36 @@ function SurveyBuilderContent() {
 
   const reactFlowInstance = useReactFlow()
 
+  // Enhanced ResizeObserver error suppression
+  useEffect(() => {
+    const errorHandler = (e: ErrorEvent) => {
+      if (
+        e.message === "ResizeObserver loop completed with undelivered notifications." ||
+        e.message.includes("ResizeObserver loop limit exceeded") ||
+        e.message.includes("ResizeObserver")
+      ) {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        return
+      }
+    }
+
+    const unhandledRejectionHandler = (e: PromiseRejectionEvent) => {
+      if (e.reason?.message?.includes("ResizeObserver")) {
+        e.preventDefault()
+        return
+      }
+    }
+
+    window.addEventListener("error", errorHandler, true)
+    window.addEventListener("unhandledrejection", unhandledRejectionHandler)
+
+    return () => {
+      window.removeEventListener("error", errorHandler, true)
+      window.removeEventListener("unhandledrejection", unhandledRejectionHandler)
+    }
+  }, [])
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = "move"
@@ -183,21 +213,6 @@ function SurveyBuilderContent() {
     }),
     [handleInsertNodeOnEdge],
   )
-
-  useEffect(() => {
-    const errorHandler = (e: ErrorEvent) => {
-      if (e.message === "ResizeObserver loop completed with undelivered notifications.") {
-        e.stopImmediatePropagation()
-        return
-      }
-      if (e.message.includes("ResizeObserver loop limit exceeded")) {
-        e.stopImmediatePropagation()
-        return
-      }
-    }
-    window.addEventListener("error", errorHandler)
-    return () => window.removeEventListener("error", errorHandler)
-  }, [])
 
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
