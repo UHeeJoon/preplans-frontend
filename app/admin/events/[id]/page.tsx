@@ -20,6 +20,7 @@ import {
   CheckCircle,
   XCircle,
   MoreVertical,
+  MessageSquare,
 } from "lucide-react"
 import {
   AlertDialog,
@@ -158,6 +159,10 @@ export default function EventDetailPage() {
               <DropdownMenuItem onClick={handleEdit}>
                 <Edit className="mr-2 h-4 w-4" />
                 수정
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push(`/admin/events/${eventId}/feedback`)}>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                후기 관리
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDuplicate}>
                 <Copy className="mr-2 h-4 w-4" />

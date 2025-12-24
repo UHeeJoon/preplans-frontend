@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useCallback, useState, useEffect, useMemo } from "react"
+import { useCallback, useState, useEffect, useMemo, useRef } from "react"
 import ReactFlow, {
   type Connection,
   Controls,
@@ -110,9 +110,24 @@ function SurveyBuilderContent() {
   const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0) // Added for Sheet navigation
 
   const reactFlowInstance = useReactFlow()
+  const reactFlowWrapper = useRef<HTMLDivElement>(null) // Added ref
 
   // Enhanced ResizeObserver error suppression
   useEffect(() => {
+    // Suppress ResizeObserver errors immediately on mount
+    const originalError = console.error
+    console.error = (...args) => {
+      if (
+        typeof args[0] === "string" &&
+        (args[0].includes("ResizeObserver") ||
+          args[0].includes("loop completed") ||
+          args[0].includes("loop limit exceeded"))
+      ) {
+        return
+      }
+      originalError.apply(console, args)
+    }
+
     const errorHandler = (e: ErrorEvent) => {
       if (
         e.message === "ResizeObserver loop completed with undelivered notifications." ||
@@ -121,23 +136,25 @@ function SurveyBuilderContent() {
       ) {
         e.stopImmediatePropagation()
         e.preventDefault()
-        return
+        return false
       }
     }
 
     const unhandledRejectionHandler = (e: PromiseRejectionEvent) => {
       if (e.reason?.message?.includes("ResizeObserver")) {
         e.preventDefault()
-        return
+        return false
       }
     }
 
+    // Add handlers with capture phase
     window.addEventListener("error", errorHandler, true)
-    window.addEventListener("unhandledrejection", unhandledRejectionHandler)
+    window.addEventListener("unhandledrejection", unhandledRejectionHandler, true)
 
     return () => {
+      console.error = originalError
       window.removeEventListener("error", errorHandler, true)
-      window.removeEventListener("unhandledrejection", unhandledRejectionHandler)
+      window.removeEventListener("unhandledrejection", unhandledRejectionHandler, true)
     }
   }, [])
 
@@ -1162,7 +1179,7 @@ function SurveyBuilderContent() {
         {/* Main Canvas */}
         <div className="flex-1 relative">
           <div className="absolute inset-0 bg-background">
-            <div className="h-full w-full">
+            <div className="h-full w-full" ref={reactFlowWrapper}>
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
