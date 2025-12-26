@@ -20,6 +20,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const router = useRouter()
 
+  const isSurveyBuilder = pathname?.includes("/surveys/builder") || pathname?.includes("/surveys/create")
+
   const navItems = [
     { label: "Projects", icon: FolderKanban, href: "/admin/projects" },
     { label: "Overview", icon: LayoutDashboard, href: "/admin" },
@@ -30,6 +32,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: "Reports", icon: FileText, href: "/admin/reports" },
     { label: "Notifications", icon: Bell, href: "/admin/notifications" },
   ]
+
+  if (isSurveyBuilder) {
+    return <div className="h-screen overflow-auto bg-background">{children}</div>
+  }
 
   return (
     <div className="flex h-screen bg-background">

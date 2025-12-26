@@ -1,5 +1,51 @@
 "use client"
 
+// Suppress ResizeObserver errors globally before any other code runs
+if (typeof window !== "undefined") {
+  // Override console.error
+  const originalError = console.error
+  console.error = (...args: any[]) => {
+    const message = args[0]?.toString() || ""
+    if (
+      message.includes("ResizeObserver") ||
+      message.includes("loop completed") ||
+      message.includes("loop limit exceeded")
+    ) {
+      return
+    }
+    originalError.apply(console, args)
+  }
+
+  // Suppress window error events
+  window.addEventListener(
+    "error",
+    (e) => {
+      const message = e.message || e.error?.message || ""
+      if (message.includes("ResizeObserver")) {
+        e.stopImmediatePropagation()
+        e.stopPropagation()
+        e.preventDefault()
+        return false
+      }
+    },
+    true,
+  )
+
+  // Suppress unhandled promise rejections
+  window.addEventListener(
+    "unhandledrejection",
+    (e) => {
+      const message = e.reason?.message?.toString() || e.reason?.toString() || ""
+      if (message.includes("ResizeObserver")) {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        return false
+      }
+    },
+    true,
+  )
+}
+
 import type React from "react"
 
 import { useCallback, useState, useEffect, useMemo, useRef } from "react"
@@ -36,14 +82,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils" // Assuming cn utility is available
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog" // Added Dialog imports
 import Link from "next/link" // Added Link
 
 const initialNodes: Node<QuestionNodeData>[] = [
@@ -112,50 +150,10 @@ function SurveyBuilderContent() {
   const reactFlowInstance = useReactFlow()
   const reactFlowWrapper = useRef<HTMLDivElement>(null) // Added ref
 
-  // Enhanced ResizeObserver error suppression
   useEffect(() => {
-    // Suppress ResizeObserver errors immediately on mount
-    const originalError = console.error
-    console.error = (...args) => {
-      if (
-        typeof args[0] === "string" &&
-        (args[0].includes("ResizeObserver") ||
-          args[0].includes("loop completed") ||
-          args[0].includes("loop limit exceeded"))
-      ) {
-        return
-      }
-      originalError.apply(console, args)
-    }
-
-    const errorHandler = (e: ErrorEvent) => {
-      if (
-        e.message === "ResizeObserver loop completed with undelivered notifications." ||
-        e.message.includes("ResizeObserver loop limit exceeded") ||
-        e.message.includes("ResizeObserver")
-      ) {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        return false
-      }
-    }
-
-    const unhandledRejectionHandler = (e: PromiseRejectionEvent) => {
-      if (e.reason?.message?.includes("ResizeObserver")) {
-        e.preventDefault()
-        return false
-      }
-    }
-
-    // Add handlers with capture phase
-    window.addEventListener("error", errorHandler, true)
-    window.addEventListener("unhandledrejection", unhandledRejectionHandler, true)
-
-    return () => {
-      console.error = originalError
-      window.removeEventListener("error", errorHandler, true)
-      window.removeEventListener("unhandledrejection", unhandledRejectionHandler, true)
-    }
+    // The console.error override and window event listeners for ResizeObserver are now handled at the top level.
+    // This useEffect hook is no longer needed for that specific purpose.
+    // However, if there were other useEffect behaviors, they would remain here.
   }, [])
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -1170,7 +1168,7 @@ function SurveyBuilderContent() {
             variant="outline"
             size="icon"
             onClick={() => setSidebarOpen(true)}
-            className="absolute left-2 top-4 z-10 h-9 w-9"
+            className="absolute left-2 top-[81px] z-10 h-9 w-9"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -1265,318 +1263,112 @@ function SurveyBuilderContent() {
         </div>
 
         {/* Right Sidebar */}
-        <div className="w-80 border-l bg-background flex-shrink-0 flex flex-col h-full">
-          <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
-            <h3 className="font-semibold">Edit Question</h3>
-            <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <ScrollArea className="flex-1 h-0 p-4">
-            {selectedNode ? (
-              <div className="space-y-4">
-                {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Question Type</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { value: "text", label: "Text" },
-                          { value: "textarea", label: "Paragraph" },
-                          { value: "radio", label: "Single" },
-                          { value: "checkbox", label: "Multiple" },
-                          { value: "email", label: "Email" },
-                          { value: "number", label: "Number" },
-                          { value: "date", label: "Date" },
-                          { value: "scale", label: "Scale" },
-                          { value: "rating", label: "Rating" },
-                        ].map((type) => (
-                          <Button
-                            key={type.value}
-                            variant={editingType === type.value ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setEditingType(type.value as QuestionType)}
-                          >
-                            {type.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Question Label</Label>
-                      <Input value={editingLabel} onChange={(e) => setEditingLabel(e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Description (Optional)</Label>
-                      <Textarea
-                        value={editingDescription}
-                        onChange={(e) => setEditingDescription(e.target.value)}
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch checked={editingRequired} onCheckedChange={setEditingRequired} id="required" />
-                      <Label htmlFor="required">Required</Label>
-                    </div>
-                  </>
-                )}
-
-                {(editingType === "radio" || editingType === "checkbox") && (
-                  <div className="space-y-2">
-                    <Label>Options</Label>
-                    <div className="space-y-2">
-                      {editingOptions.map((option, idx) => (
-                        <div key={idx} className="flex gap-2">
-                          <Input
-                            value={option}
-                            onChange={(e) => updateOption(idx, e.target.value)}
-                            placeholder={`Option ${idx + 1}`}
-                          />
-                          <Button variant="ghost" size="icon" onClick={() => removeOption(idx)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+        {selectedNode && (
+          <div className="w-80 border-l bg-background flex-shrink-0 flex flex-col h-full">
+            <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
+              <h3 className="font-semibold">Edit Question</h3>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1 h-0 p-4">
+              {selectedNode ? (
+                <div className="space-y-4">
+                  {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Question Type</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { value: "text", label: "Text" },
+                            { value: "textarea", label: "Paragraph" },
+                            { value: "radio", label: "Single" },
+                            { value: "checkbox", label: "Multiple" },
+                            { value: "email", label: "Email" },
+                            { value: "number", label: "Number" },
+                            { value: "date", label: "Date" },
+                            { value: "scale", label: "Scale" },
+                            { value: "rating", label: "Rating" },
+                          ].map((type) => (
+                            <Button
+                              key={type.value}
+                              variant={editingType === type.value ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setEditingType(type.value as QuestionType)}
+                            >
+                              {type.label}
+                            </Button>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                    <Button variant="outline" size="sm" onClick={addOption} className="w-full bg-transparent">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Option
-                    </Button>
-                  </div>
-                )}
-
-                {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
-                  <div className="space-y-2 pt-4">
-                    <Button onClick={updateNodeData} className="w-full">
-                      <Check className="h-4 w-4 mr-2" />
-                      Save Changes
-                    </Button>
-                    <Button variant="destructive" onClick={deleteSelectedNode} className="w-full">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Question
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-6 text-muted-foreground">
-                <p className="text-sm">Select a question node to edit its properties</p>
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      </div>
-
-      {/* Settings Dialog */}
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Survey Settings</DialogTitle>
-            <DialogDescription>Configure your survey settings and preferences</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="survey-title">Survey Title</Label>
-              <Input
-                id="survey-title"
-                value={surveyTitle}
-                onChange={(e) => setSurveyTitle(e.target.value)}
-                placeholder="Enter survey title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="survey-description">Description</Label>
-              <Textarea
-                id="survey-description"
-                value={surveySettings.description}
-                onChange={(e) => setSurveySettings({ ...surveySettings, description: e.target.value })}
-                rows={3}
-                placeholder="Enter survey description"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="welcome-message">Welcome Message</Label>
-              <Textarea
-                id="welcome-message"
-                value={surveySettings.welcomeMessage}
-                onChange={(e) => setSurveySettings({ ...surveySettings, welcomeMessage: e.target.value })}
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="thank-you-message">Thank You Message</Label>
-              <Textarea
-                id="thank-you-message"
-                value={surveySettings.thankYouMessage}
-                onChange={(e) => setSurveySettings({ ...surveySettings, thankYouMessage: e.target.value })}
-                rows={2}
-              />
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="allow-anonymous">Allow Anonymous Responses</Label>
-                <Switch
-                  id="allow-anonymous"
-                  checked={surveySettings.allowAnonymous}
-                  onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, allowAnonymous: checked })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="show-progress">Show Progress Bar</Label>
-                <Switch
-                  id="show-progress"
-                  checked={surveySettings.showProgressBar}
-                  onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, showProgressBar: checked })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="randomize">Randomize Questions</Label>
-                <Switch
-                  id="randomize"
-                  checked={surveySettings.randomizeQuestions}
-                  onCheckedChange={(checked) => setSurveySettings({ ...surveySettings, randomizeQuestions: checked })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="multiple-submissions">Allow Multiple Submissions</Label>
-                <Switch
-                  id="multiple-submissions"
-                  checked={surveySettings.allowMultipleSubmissions}
-                  onCheckedChange={(checked) =>
-                    setSurveySettings({ ...surveySettings, allowMultipleSubmissions: checked })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSettings(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => setShowSettings(false)}>Save Settings</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Preview Dialog */}
-      <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
-          <DialogHeader className="px-6 py-4 border-b">
-            <DialogTitle>{surveyTitle}</DialogTitle>
-            <DialogDescription>{surveySettings.description || "Preview your survey flow"}</DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 flex overflow-hidden">
-            {/* Navigation Sidebar */}
-            <div className="w-64 border-r flex flex-col">
-              <div className="p-4 border-b">
-                <h3 className="font-semibold">Navigation</h3>
-              </div>
-              <ScrollArea className="flex-1 h-0">
-                <div className="p-2 space-y-1">
-                  {orderedQuestions.map((node, index) => (
-                    <button
-                      key={node.id}
-                      onClick={() => setCurrentPreviewIndex(index)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                        currentPreviewIndex === index ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                      } ${previewAnswers[node.id] ? "flex items-center justify-between" : ""}`}
-                    >
-                      <span>{node.data.label || node.data.question || "Question"}</span>
-                      {previewAnswers[node.id] && <Check className="h-4 w-4 ml-2 flex-shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
-
-            {/* Preview Content */}
-            <div className="flex-1 flex flex-col">
-              {currentPreviewNode ? (
-                <>
-                  {/* Progress Bar */}
-                  {surveySettings.showProgressBar && (
-                    <div className="p-4 border-b">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Progress</span>
-                        <span className="text-sm text-muted-foreground">{progressPercentage}%</span>
                       </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all duration-300"
-                          style={{ width: `${progressPercentage}%` }}
+
+                      <div className="space-y-2">
+                        <Label>Question Label</Label>
+                        <Input value={editingLabel} onChange={(e) => setEditingLabel(e.target.value)} />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Description (Optional)</Label>
+                        <Textarea
+                          value={editingDescription}
+                          onChange={(e) => setEditingDescription(e.target.value)}
+                          rows={3}
                         />
                       </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Switch checked={editingRequired} onCheckedChange={setEditingRequired} id="required" />
+                        <Label htmlFor="required">Required</Label>
+                      </div>
+                    </>
+                  )}
+
+                  {(editingType === "radio" || editingType === "checkbox") && (
+                    <div className="space-y-2">
+                      <Label>Options</Label>
+                      <div className="space-y-2">
+                        {editingOptions.map((option, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <Input
+                              value={option}
+                              onChange={(e) => updateOption(idx, e.target.value)}
+                              placeholder={`Option ${idx + 1}`}
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => removeOption(idx)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button variant="outline" size="sm" onClick={addOption} className="w-full bg-transparent">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Option
+                      </Button>
                     </div>
                   )}
 
-                  {/* Welcome Message */}
-                  {currentPreviewIndex === 0 && surveySettings.welcomeMessage && (
-                    <div className="p-4 bg-muted/30 border-b">
-                      <p className="text-sm">{surveySettings.welcomeMessage}</p>
+                  {selectedNode.data.type !== "start" && selectedNode.data.type !== "end" && (
+                    <div className="space-y-2 pt-4">
+                      <Button onClick={updateNodeData} className="w-full">
+                        <Check className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </Button>
+                      <Button variant="destructive" onClick={deleteSelectedNode} className="w-full">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Question
+                      </Button>
                     </div>
                   )}
-
-                  {/* Question Content */}
-                  <ScrollArea className="flex-1">
-                    <div className="p-6">{renderPreviewQuestion(currentPreviewNode)}</div>
-                  </ScrollArea>
-
-                  {/* Navigation Buttons */}
-                  <div className="p-4 border-t flex justify-between">
-                    <Button
-                      variant="outline"
-                      onClick={handlePreviewPrevious}
-                      disabled={currentPreviewIndex === 0 || orderedQuestions.length === 0}
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-2" />
-                      Previous
-                    </Button>
-                    <Button onClick={handlePreviewNext} disabled={currentPreviewNode?.data.type === "end"}>
-                      {currentPreviewNode?.data.type === "end" ? "Finish" : "Next"}
-                      <ChevronRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  </div>
-                </>
+                </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold mb-2">Survey Complete</h3>
-                    <p className="text-muted-foreground mb-4">{surveySettings.thankYouMessage}</p>
-                    <Button onClick={() => setShowPreview(false)}>Close Preview</Button>
-                  </div>
+                <div className="text-center text-muted-foreground text-sm py-8">
+                  Select a question node to edit its properties
                 </div>
               )}
-            </div>
+            </ScrollArea>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Save Dialog */}
-      {showSaveDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">Save Survey</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Are you sure you want to save the current survey configuration?
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowSaveDialog(false)} disabled={isSaving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveSurvey} disabled={isSaving}>
-                {isSaving ? "Saving..." : "Save Survey"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Question Menu - REMOVED DUPLICATE */}
-      {/* The duplicate add question modal has been removed here. */}
+        )}
+      </div>
     </div>
   )
 }

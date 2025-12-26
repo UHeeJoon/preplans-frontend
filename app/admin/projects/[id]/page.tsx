@@ -1,5 +1,13 @@
 "use client"
 
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+
+import { DropdownMenuContent } from "@/components/ui/dropdown-menu"
+
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+
+import { DropdownMenu } from "@/components/ui/dropdown-menu"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -25,6 +33,7 @@ import {
   MessageSquare,
   Eye,
   MoreVertical,
+  Download,
 } from "lucide-react"
 import {
   BarChart,
@@ -38,10 +47,15 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Area,
-  AreaChart,
+  LineChart,
+  Line,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ComposedChart,
 } from "recharts"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -50,7 +64,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   // Mock data
   const project = {
     id: projectId,
-    title: "2025 신입생 프로그램",
+    name: "2025 신입생 프로그램",
     description: "신입생 대상 오리엔테이션 및 프로그램",
     status: "active",
     startDate: "2025-01-15",
@@ -161,6 +175,48 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
   const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b"]
 
+  const weeklyParticipationData = [
+    { week: "1주차", 등록: 45, 참여: 42, 목표: 50, 달성률: 84 },
+    { week: "2주차", 등록: 78, 참여: 71, 목표: 80, 달성률: 88.75 },
+    { week: "3주차", 등록: 123, 참여: 115, 목표: 120, 달성률: 95.83 },
+    { week: "4주차", 등록: 167, 참여: 159, 목표: 160, 달성률: 99.38 },
+    { week: "5주차", 등록: 201, 참여: 195, 목표: 200, 달성률: 97.5 },
+    { week: "6주차", 등록: 245, 참여: 245, 목표: 240, 달성률: 102.08 },
+  ]
+
+  const demographicData = [
+    { category: "참여율", value: 87.5 },
+    { category: "완료율", value: 92.3 },
+    { category: "만족도", value: 85.7 },
+    { category: "재참여율", value: 78.4 },
+    { category: "추천의향", value: 81.2 },
+  ]
+
+  const monthlyTrendData = [
+    { month: "1월", 이벤트: 3, 참여자: 245, 만족도: 4.2, 예산집행률: 23 },
+    { month: "2월", 이벤트: 2, 참여자: 180, 만족도: 4.5, 예산집행률: 41 },
+    { month: "3월", 이벤트: 4, 참여자: 320, 만족도: 4.3, 예산집행률: 67 },
+    { month: "4월", 이벤트: 3, 참여자: 280, 만족도: 4.6, 예산집행률: 85 },
+  ]
+
+  const statisticalSummary = {
+    totalEvents: projectEvents.length,
+    totalParticipants: project.totalParticipants,
+    avgParticipationRate: 87.5,
+    avgSatisfactionScore: 4.3,
+    targetAchievementRate: 95.2,
+    completionRate: 92.3,
+    budgetUtilizationRate: 85,
+    noShowRate: 4.2,
+    repeatParticipationRate: 78.4,
+  }
+
+  const exportReport = () => {
+    console.log("[v0] Generating compliance report...")
+    // Implementation for PDF/Excel export
+    alert("보고서가 생성되었습니다. (구현 예정)")
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
@@ -179,32 +235,30 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/admin/projects">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <FolderKanban className="h-5 w-5" />
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center gap-3">
+                <FolderKanban className="h-8 w-8 text-primary" />
+                <h1 className="text-3xl font-bold">{project.name}</h1>
+                {getStatusBadge(project.status)}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold">{project.title}</h1>
-                  {getStatusBadge(project.status)}
-                </div>
-                <p className="text-sm text-muted-foreground">{project.description}</p>
-              </div>
+              <p className="text-muted-foreground mt-1">{project.description}</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Link href={`/admin/projects/${projectId}/edit`}>
-              <Button variant="outline">
-                <Edit className="mr-2 h-4 w-4" />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href={`/admin/projects/${params.id}/edit`}>
+                <Edit className="h-4 w-4 mr-2" />
                 수정
-              </Button>
-            </Link>
+              </Link>
+            </Button>
+            <Button onClick={() => router.push(`/admin/events/create?projectId=${params.id}`)}>
+              <Plus className="h-4 w-4 mr-2" />
+              이벤트 추가
+            </Button>
           </div>
         </div>
 
@@ -448,48 +502,149 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-1">통합 분석 대시보드</h3>
-              <p className="text-sm text-muted-foreground">프로젝트 전체 성과 및 트렌드 분석</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold mb-1">통합 분석 대시보드</h3>
+                <p className="text-sm text-muted-foreground">연말 보고 및 컴플라이언스 제출용 고도화 통계</p>
+              </div>
+              <Button onClick={exportReport} variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                보고서 내보내기
+              </Button>
             </div>
 
-            {/* Participation Trend Chart */}
+            <div className="grid gap-4 md:grid-cols-5">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-sm text-muted-foreground">총 이벤트</div>
+                  <div className="text-2xl font-bold">{statisticalSummary.totalEvents}건</div>
+                  <Progress value={100} className="mt-2" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-sm text-muted-foreground">평균 참여율</div>
+                  <div className="text-2xl font-bold">{statisticalSummary.avgParticipationRate}%</div>
+                  <Progress value={statisticalSummary.avgParticipationRate} className="mt-2" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-sm text-muted-foreground">평균 만족도</div>
+                  <div className="text-2xl font-bold">{statisticalSummary.avgSatisfactionScore}/5.0</div>
+                  <Progress value={statisticalSummary.avgSatisfactionScore * 20} className="mt-2" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-sm text-muted-foreground">목표 달성률</div>
+                  <div className="text-2xl font-bold">{statisticalSummary.targetAchievementRate}%</div>
+                  <Progress value={statisticalSummary.targetAchievementRate} className="mt-2" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-sm text-muted-foreground">예산 집행률</div>
+                  <div className="text-2xl font-bold">{statisticalSummary.budgetUtilizationRate}%</div>
+                  <Progress value={statisticalSummary.budgetUtilizationRate} className="mt-2" />
+                </CardContent>
+              </Card>
+            </div>
+
             <Card>
               <CardHeader>
-                <CardTitle>참여자 추이</CardTitle>
-                <CardDescription>시간에 따른 참여자 증가 추이 및 목표 달성률</CardDescription>
+                <CardTitle>주간별 참여 현황 및 목표 달성률</CardTitle>
+                <CardDescription>등록, 실제 참여, 목표 대비 달성 현황 (연말 보고용)</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={participationTrendData}>
+                <ResponsiveContainer width="100%" height={350}>
+                  <ComposedChart data={weeklyParticipationData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
+                    <XAxis dataKey="week" />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" />
                     <Tooltip />
                     <Legend />
-                    <Area
+                    <Bar yAxisId="left" dataKey="등록" fill="#3b82f6" name="등록 인원" />
+                    <Bar yAxisId="left" dataKey="참여" fill="#10b981" name="실제 참여" />
+                    <Line yAxisId="left" type="monotone" dataKey="목표" stroke="#f59e0b" strokeWidth={2} name="목표" />
+                    <Line
+                      yAxisId="right"
                       type="monotone"
-                      dataKey="participants"
-                      stackId="1"
-                      stroke="#3b82f6"
-                      fill="#3b82f6"
-                      name="실제 참여자"
+                      dataKey="달성률"
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      name="달성률 (%)"
                     />
-                    <Area
-                      type="monotone"
-                      dataKey="target"
-                      stackId="2"
-                      stroke="#10b981"
-                      fill="#10b981"
-                      fillOpacity={0.3}
-                      name="목표"
-                    />
-                  </AreaChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
             <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>핵심 성과 지표 분석</CardTitle>
+                  <CardDescription>5가지 핵심 지표의 균형 분석</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart data={demographicData}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="category" />
+                      <PolarRadiusAxis angle={90} domain={[0, 100]} />
+                      <Radar name="달성도" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                      <Tooltip />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>월별 종합 트렌드</CardTitle>
+                  <CardDescription>이벤트 수, 참여자, 만족도, 예산 집행률</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={monthlyTrendData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="참여자"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        name="참여자 수"
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="만족도"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        name="만족도"
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="예산집행률"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        name="예산집행률 (%)"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
               {/* Event Comparison Chart */}
               <Card>
                 <CardHeader>
@@ -559,53 +714,55 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </CardContent>
               </Card>
 
-              {/* Key Metrics Summary */}
               <Card>
                 <CardHeader>
-                  <CardTitle>핵심 지표 요약</CardTitle>
-                  <CardDescription>프로젝트 주요 성과 지표</CardDescription>
+                  <CardTitle>통계 요약 (Statistical Summary)</CardTitle>
+                  <CardDescription>연말 보고서 및 컴플라이언스 제출용</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">전체 목표 달성률</span>
-                      <span className="font-bold">102%</span>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-muted-foreground">총 이벤트 수</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.totalEvents}건</div>
                     </div>
-                    <Progress value={102} className="h-2" />
+                    <div>
+                      <div className="text-muted-foreground">총 참가자 수</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.totalParticipants}명</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">평균 참여율</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.avgParticipationRate}%</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">평균 만족도</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.avgSatisfactionScore}/5.0</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">목표 달성률</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.targetAchievementRate}%</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">완료율</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.completionRate}%</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">예산 집행률</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.budgetUtilizationRate}%</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">노쇼율</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.noShowRate}%</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">재참여율</div>
+                      <div className="text-lg font-semibold">{statisticalSummary.repeatParticipationRate}%</div>
+                    </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">평균 이벤트 참여율</span>
-                      <span className="font-bold">66%</span>
+                  <div className="pt-3 border-t">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>데이터 기준일: 2025년 2월 26일</span>
+                      <span>신뢰도: 95%</span>
                     </div>
-                    <Progress value={66} className="h-2" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">평균 설문 응답률</span>
-                      <span className="font-bold">55%</span>
-                    </div>
-                    <Progress value={55} className="h-2" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">예산 집행률</span>
-                      <span className="font-bold">64%</span>
-                    </div>
-                    <Progress value={64} className="h-2" />
-                  </div>
-
-                  <div className="pt-4 border-t space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">종합 평가</span>
-                      <Badge className="bg-green-500">우수</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      목표를 초과 달성했으며, 높은 참여율과 만족도를 기록하고 있습니다.
-                    </p>
                   </div>
                 </CardContent>
               </Card>

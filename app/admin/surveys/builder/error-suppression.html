@@ -1,0 +1,27 @@
+<script>
+  // Suppress harmless ResizeObserver errors from ReactFlow
+  (function() {
+    const originalError = window.console.error;
+    window.console.error = function(...args) {
+      if (args[0] && typeof args[0] === 'string' && args[0].includes('ResizeObserver')) {
+        return;
+      }
+      originalError.apply(console, args);
+    };
+
+    window.addEventListener('error', function(e) {
+      if (e.message && e.message.includes('ResizeObserver')) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        return false;
+      }
+    }, true);
+
+    window.addEventListener('unhandledrejection', function(e) {
+      if (e.reason && e.reason.message && e.reason.message.includes('ResizeObserver')) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    });
+  })();
+</script>
